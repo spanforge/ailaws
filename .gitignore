@@ -131,6 +131,7 @@ dist
 # Internal planning & narrative docs — not for source control
 implementplan.md
 story.md
+smb.md
 
 # yarn v2
 .yarn/cache

@@ -2,8 +2,12 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import authConfig from "@/auth.config";
+import { captureException } from "@/lib/monitoring";
+import { getRequestFingerprint, takeRateLimit } from "@/lib/rate-limit";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
   providers: [
     Credentials({
       name: "credentials",
@@ -11,47 +15,41 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+      async authorize(credentials, request) {
+        const email = credentials?.email?.toString().trim().toLowerCase() ?? "";
+        const password = credentials?.password?.toString() ?? "";
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
+        if (!email || !password) return null;
+
+        const rateLimit = takeRateLimit({
+          key: `auth:login:${getRequestFingerprint(request)}:${email}`,
+          limit: 8,
+          windowMs: 10 * 60 * 1000,
         });
 
-        if (!user || !user.password) return null;
+        if (!rateLimit.allowed) {
+          return null;
+        }
 
-        const valid = await bcrypt.compare(
-          credentials.password as string,
-          user.password
-        );
-        if (!valid) return null;
+        try {
+          const user = await prisma.user.findUnique({
+            where: { email },
+          });
 
-        return { id: user.id, email: user.email, name: user.name, role: user.role };
+          if (!user || !user.password) return null;
+
+          const valid = await bcrypt.compare(password, user.password);
+          if (!valid) return null;
+
+          return { id: user.id, email: user.email, name: user.name, role: user.role };
+        } catch (error) {
+          await captureException(error, {
+            tags: { surface: "auth", action: "credentials-login" },
+            extra: { email },
+          });
+          return null;
+        }
       },
     }),
   ],
-  callbacks: {
-    jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-        token.email = user.email;
-        token.name = user.name;
-        token.role = (user as { role?: string }).role ?? "user";
-      }
-      return token;
-    },
-    session({ session, token }) {
-      if (token && session.user) {
-        session.user.id = token.id as string;
-        (session.user as { role?: string }).role = token.role as string;
-      }
-      return session;
-    },
-  },
-  pages: {
-    signIn: "/login",
-    error: "/login",
-  },
-  session: { strategy: "jwt" },
-  secret: process.env.AUTH_SECRET,
 });

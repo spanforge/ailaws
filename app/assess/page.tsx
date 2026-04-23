@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AssessmentInput } from "@/lib/rules-engine";
-
-// ── Step definitions ──────────────────────────────────────────────────────────
+import { PRODUCT_PRESETS, applyProductPreset, getProductPresetById } from "@/lib/smb";
 
 const STEPS = ["Company Profile", "Product Profile", "Technical Profile", "Review"];
 
@@ -44,6 +43,7 @@ const USE_CASE_OPTIONS = [
 
 const BLANK: AssessmentInput = {
   company_name: "",
+  product_preset: "",
   hq_region: "",
   company_size: "startup",
   industry: "",
@@ -61,30 +61,29 @@ const BLANK: AssessmentInput = {
 
 export default function AssessPage() {
   const router = useRouter();
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(-1);
   const [form, setForm] = useState<AssessmentInput>(BLANK);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  // Restore draft if user came from results page ("Edit & re-run")
   useEffect(() => {
     try {
       const draft = sessionStorage.getItem("assessment-draft");
       if (draft) {
         setForm(JSON.parse(draft) as AssessmentInput);
-        // Keep draft in storage until they re-submit (so re-navigating still works)
+        setStep(0);
       }
     } catch {
-      // malformed draft — ignore
+      // Ignore malformed draft data.
     }
   }, []);
 
   function toggleMulti(field: "target_markets" | "use_cases", value: string) {
     setForm((prev) => {
-      const arr = prev[field] as string[];
+      const current = prev[field] as string[];
       return {
         ...prev,
-        [field]: arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value],
+        [field]: current.includes(value) ? current.filter((entry) => entry !== value) : [...current, value],
       };
     });
   }
@@ -96,16 +95,21 @@ export default function AssessPage() {
   async function submit() {
     setSubmitting(true);
     setError("");
+
     try {
       const res = await fetch("/api/assessments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      if (!res.ok) throw new Error("Server error");
+
+      if (!res.ok) {
+        throw new Error("Server error");
+      }
+
       const { id, results } = await res.json();
-      // Store results and the input so the results page can show them + allow re-editing
       sessionStorage.setItem(`assessment-${id}`, JSON.stringify(results));
+      sessionStorage.setItem(`assessment-input-${id}`, JSON.stringify(form));
       sessionStorage.setItem("assessment-draft", JSON.stringify(form));
       router.push(`/assess/results/${id}`);
     } catch {
@@ -118,87 +122,220 @@ export default function AssessPage() {
     <main className="page">
       <div className="shell" style={{ paddingTop: "2.5rem", maxWidth: "760px" }}>
         <p className="kicker">Assessment Wizard</p>
-        <h1 style={{ margin: "0.4rem 0 0.5rem", color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "clamp(1.8rem, 3.5vw, 2.8rem)", lineHeight: 1.08, letterSpacing: "-0.03em" }}>
+        <h1
+          style={{
+            margin: "0.4rem 0 0.5rem",
+            color: "var(--navy)",
+            fontFamily: "var(--font-heading)",
+            fontSize: "clamp(1.8rem, 3.5vw, 2.8rem)",
+            lineHeight: 1.08,
+            letterSpacing: "-0.03em",
+          }}
+        >
           Which AI laws apply to your product?
         </h1>
         <p style={{ color: "var(--muted)", margin: "0 0 2rem" }}>
-          Answer {STEPS.length} short sections. We&apos;ll run a rules-based analysis and generate a personalized compliance checklist.
+          Answer {STEPS.length} short sections. We will run a rules-based analysis and generate an action plan you can share today.
         </p>
 
-        {/* Progress */}
-        <div className="assess-progress">
-          {STEPS.map((s, i) => (
-            <div
-              key={s}
-              className={`assess-step ${i === step ? "assess-step--active" : ""} ${i < step ? "assess-step--done" : ""}`}
-              onClick={() => i < step && setStep(i)}
-              style={{ cursor: i < step ? "pointer" : "default" }}
-            >
-              <span className="assess-step__num">{i < step ? "✓" : i + 1}</span>
-              <span className="assess-step__label">{s}</span>
+        {step === -1 ? (
+          <PresetPicker
+            onSelect={(presetId) => {
+              setForm(applyProductPreset(BLANK, presetId));
+              setStep(0);
+            }}
+            onBlank={() => {
+              setForm(BLANK);
+              setStep(0);
+            }}
+          />
+        ) : (
+          <>
+            <ActivePresetBanner form={form} onChangePreset={() => setStep(-1)} />
+            <div className="assess-progress">
+              {STEPS.map((label, index) => (
+                <div
+                  key={label}
+                  className={`assess-step ${index === step ? "assess-step--active" : ""} ${index < step ? "assess-step--done" : ""}`}
+                  onClick={() => index < step && setStep(index)}
+                  style={{ cursor: index < step ? "pointer" : "default" }}
+                >
+                  <span className="assess-step__num">{index < step ? "✓" : index + 1}</span>
+                  <span className="assess-step__label">{label}</span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        {/* Step panels */}
-        <div className="content-card" style={{ marginTop: "1.5rem" }}>
-          {step === 0 && (
-            <StepCompany form={form} set={set} toggleMulti={toggleMulti} />
-          )}
-          {step === 1 && (
-            <StepProduct form={form} set={set} toggleMulti={toggleMulti} />
-          )}
-          {step === 2 && (
-            <StepTechnical form={form} set={set} />
-          )}
-          {step === 3 && (
-            <StepReview form={form} />
-          )}
+            <div className="content-card" style={{ marginTop: "1.5rem" }}>
+              {step === 0 && <StepCompany form={form} set={set} toggleMulti={toggleMulti} />}
+              {step === 1 && <StepProduct form={form} set={set} toggleMulti={toggleMulti} />}
+              {step === 2 && <StepTechnical form={form} set={set} />}
+              {step === 3 && <StepReview form={form} />}
 
-          {error && (
-            <p style={{ color: "var(--red)", marginTop: "1rem" }}>{error}</p>
-          )}
+              {error ? <p style={{ color: "var(--red)", marginTop: "1rem" }}>{error}</p> : null}
 
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1.75rem" }}>
-            {step > 0 ? (
-              <button className="button" onClick={() => setStep((s) => s - 1)}>← Back</button>
-            ) : <span />}
-            {step < STEPS.length - 1 ? (
-              <button
-                className="button button--primary"
-                onClick={() => setStep((s) => s + 1)}
-                disabled={!canAdvance(step, form)}
-              >
-                Next →
-              </button>
-            ) : (
-              <button
-                className="button button--primary"
-                onClick={submit}
-                disabled={submitting}
-              >
-                {submitting ? "Analyzing…" : "Run assessment →"}
-              </button>
-            )}
-          </div>
-        </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1.75rem" }}>
+                {step > 0 ? (
+                  <button className="button" onClick={() => setStep((current) => current - 1)}>
+                    ← Back
+                  </button>
+                ) : (
+                  <button className="button" onClick={() => setStep(-1)}>
+                    ← Presets
+                  </button>
+                )}
+
+                {step < STEPS.length - 1 ? (
+                  <button
+                    className="button button--primary"
+                    onClick={() => setStep((current) => current + 1)}
+                    disabled={!canAdvance(step, form)}
+                  >
+                    Next →
+                  </button>
+                ) : (
+                  <button className="button button--primary" onClick={submit} disabled={submitting}>
+                    {submitting ? "Analyzing..." : "Run assessment →"}
+                  </button>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </main>
   );
 }
 
+function ActivePresetBanner({
+  form,
+  onChangePreset,
+}: {
+  form: AssessmentInput;
+  onChangePreset: () => void;
+}) {
+  const preset = getProductPresetById(form.product_preset);
+
+  if (!preset) return null;
+
+  return (
+    <div className="content-card" style={{ marginBottom: "1rem", padding: "1rem 1.1rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div>
+          <p style={{ margin: "0 0 0.25rem", fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)" }}>
+            Active preset
+          </p>
+          <strong style={{ display: "block", color: "var(--navy)", fontSize: "1rem" }}>{preset.title}</strong>
+          <p style={{ margin: "0.35rem 0 0", color: "var(--muted)", fontSize: "0.9rem", lineHeight: 1.5 }}>
+            {preset.description}
+          </p>
+          <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap", marginTop: "0.6rem" }}>
+            <PresetValue label={`HQ ${form.hq_region || "not set"}`} />
+            <PresetValue label={`Markets ${form.target_markets.join(", ") || "not set"}`} />
+            <PresetValue label={`Type ${form.product_type}`} />
+            <PresetValue label={`Deployment ${form.deployment_context}`} />
+            <PresetValue label={`Use cases ${form.use_cases.join(", ") || "not set"}`} />
+            <PresetValue label={`Risk ${form.risk_self_assessment || "not set"}`} />
+          </div>
+        </div>
+        <button className="button" type="button" onClick={onChangePreset}>
+          Change preset
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PresetValue({ label }: { label: string }) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        borderRadius: "999px",
+        padding: "0.22rem 0.6rem",
+        background: "rgba(16,32,48,0.07)",
+        color: "var(--navy)",
+        fontSize: "0.78rem",
+        fontWeight: 700,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function PresetPicker({
+  onSelect,
+  onBlank,
+}: {
+  onSelect: (presetId: string) => void;
+  onBlank: () => void;
+}) {
+  return (
+    <div className="content-card">
+      <h2 style={{ margin: "0 0 0.75rem", color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.5rem" }}>
+        Start from a preset
+      </h2>
+      <p style={{ color: "var(--muted)", margin: "0 0 1.25rem" }}>
+        Choose the closest product shape to prefill the wizard, or start from a blank assessment.
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.85rem" }}>
+        {PRODUCT_PRESETS.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            onClick={() => onSelect(preset.id)}
+            style={{
+              textAlign: "left",
+              padding: "1rem",
+              borderRadius: "18px",
+              border: "1px solid rgba(16,32,48,0.1)",
+              background: "rgba(255,255,255,0.85)",
+              cursor: "pointer",
+            }}
+          >
+            <strong style={{ display: "block", color: "var(--navy)", marginBottom: "0.35rem" }}>{preset.title}</strong>
+            <span style={{ display: "block", color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.5 }}>{preset.description}</span>
+            <span
+              style={{
+                display: "inline-flex",
+                marginTop: "0.7rem",
+                fontSize: "0.74rem",
+                fontWeight: 700,
+                color: "var(--navy)",
+                background: "rgba(16,32,48,0.07)",
+                borderRadius: "999px",
+                padding: "0.2rem 0.55rem",
+              }}
+            >
+              {preset.audience}
+            </span>
+          </button>
+        ))}
+      </div>
+      <div style={{ marginTop: "1rem", display: "flex", justifyContent: "flex-end" }}>
+        <button className="button" onClick={onBlank}>
+          Start blank →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function canAdvance(step: number, form: AssessmentInput): boolean {
-  if (step === 0) return !!(form.hq_region && form.target_markets.length > 0);
-  if (step === 1) return !!(form.product_type && form.use_cases.length > 0);
+  if (step === 0) return Boolean(form.hq_region && form.target_markets.length > 0);
+  if (step === 1) return Boolean(form.product_type && form.use_cases.length > 0);
   return true;
 }
 
-// ── Step 0: Company ───────────────────────────────────────────────────────────
-
-function StepCompany({ form, set, toggleMulti }: {
+function StepCompany({
+  form,
+  set,
+  toggleMulti,
+}: {
   form: AssessmentInput;
-  set: (f: keyof AssessmentInput, v: unknown) => void;
-  toggleMulti: (f: "target_markets" | "use_cases", v: string) => void;
+  set: (field: keyof AssessmentInput, value: unknown) => void;
+  toggleMulti: (field: "target_markets" | "use_cases", value: string) => void;
 }) {
   return (
     <div>
@@ -206,27 +343,26 @@ function StepCompany({ form, set, toggleMulti }: {
       <div className="form-grid">
         <div className="field">
           <label>Company name (optional)</label>
-          <input
-            type="text"
-            value={form.company_name ?? ""}
-            onChange={(e) => set("company_name", e.target.value)}
-            placeholder="Acme AI Inc."
-          />
+          <input type="text" value={form.company_name ?? ""} onChange={(event) => set("company_name", event.target.value)} placeholder="Acme AI Inc." />
         </div>
         <div className="field">
           <label>Company size</label>
-          <select value={form.company_size} onChange={(e) => set("company_size", e.target.value)}>
+          <select value={form.company_size} onChange={(event) => set("company_size", event.target.value)}>
             <option value="startup">Startup (&lt;50 employees)</option>
-            <option value="sme">SME (50–250)</option>
-            <option value="large">Large (250–5000)</option>
+            <option value="sme">SME (50-250)</option>
+            <option value="large">Large (250-5000)</option>
             <option value="enterprise">Enterprise (5000+)</option>
           </select>
         </div>
         <div className="field">
           <label>HQ Region *</label>
-          <select value={form.hq_region} onChange={(e) => set("hq_region", e.target.value)}>
-            <option value="">Select region…</option>
-            {TARGET_MARKETS.map((m) => <option key={m.code} value={m.code}>{m.label}</option>)}
+          <select value={form.hq_region} onChange={(event) => set("hq_region", event.target.value)}>
+            <option value="">Select region...</option>
+            {TARGET_MARKETS.map((market) => (
+              <option key={market.code} value={market.code}>
+                {market.label}
+              </option>
+            ))}
             <option value="Other">Other</option>
           </select>
         </div>
@@ -235,22 +371,27 @@ function StepCompany({ form, set, toggleMulti }: {
           <input
             type="text"
             value={form.industry ?? ""}
-            onChange={(e) => set("industry", e.target.value)}
+            onChange={(event) => set("industry", event.target.value)}
             placeholder="e.g. Fintech, Healthcare, SaaS"
           />
         </div>
       </div>
+      {form.product_preset ? (
+        <p style={{ margin: "0.8rem 0 0", color: "var(--muted)", fontSize: "0.85rem" }}>
+          Preset defaults loaded for company size, HQ region, industry, and target markets. You can edit any of them.
+        </p>
+      ) : null}
       <div className="field" style={{ marginTop: "1.25rem" }}>
         <label>Target markets * (select all that apply)</label>
         <div className="chip-cloud" style={{ marginTop: "0.65rem" }}>
-          {TARGET_MARKETS.map((m) => (
+          {TARGET_MARKETS.map((market) => (
             <button
-              key={m.code}
+              key={market.code}
               type="button"
-              className={`chip ${form.target_markets.includes(m.code) ? "chip--selected" : ""}`}
-              onClick={() => toggleMulti("target_markets", m.code)}
+              className={`chip ${form.target_markets.includes(market.code) ? "chip--selected" : ""}`}
+              onClick={() => toggleMulti("target_markets", market.code)}
             >
-              {m.label}
+              {market.label}
             </button>
           ))}
         </div>
@@ -259,20 +400,31 @@ function StepCompany({ form, set, toggleMulti }: {
   );
 }
 
-// ── Step 1: Product ───────────────────────────────────────────────────────────
-
-function StepProduct({ form, set, toggleMulti }: {
+function StepProduct({
+  form,
+  set,
+  toggleMulti,
+}: {
   form: AssessmentInput;
-  set: (f: keyof AssessmentInput, v: unknown) => void;
-  toggleMulti: (f: "target_markets" | "use_cases", v: string) => void;
+  set: (field: keyof AssessmentInput, value: unknown) => void;
+  toggleMulti: (field: "target_markets" | "use_cases", value: string) => void;
 }) {
+  const preset = getProductPresetById(form.product_preset);
+
   return (
     <div>
       <h2 style={{ margin: "0 0 1.25rem", color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.5rem" }}>Product Profile</h2>
+      {preset ? (
+        <div className="callout" style={{ marginBottom: "1rem" }}>
+          <p style={{ margin: 0, fontSize: "0.9rem" }}>
+            Prefilled from <strong>{preset.title}</strong>. Product, use case, deployment, and technical defaults are already loaded.
+          </p>
+        </div>
+      ) : null}
       <div className="form-grid">
         <div className="field">
           <label>Product type *</label>
-          <select value={form.product_type} onChange={(e) => set("product_type", e.target.value)}>
+          <select value={form.product_type} onChange={(event) => set("product_type", event.target.value)}>
             <option value="saas">SaaS Product</option>
             <option value="ai_model">AI Model / API</option>
             <option value="embedded">AI-Embedded Product</option>
@@ -283,7 +435,7 @@ function StepProduct({ form, set, toggleMulti }: {
         </div>
         <div className="field">
           <label>Deployment context</label>
-          <select value={form.deployment_context} onChange={(e) => set("deployment_context", e.target.value)}>
+          <select value={form.deployment_context} onChange={(event) => set("deployment_context", event.target.value)}>
             <option value="public">Public (B2C)</option>
             <option value="enterprise">Enterprise (B2B)</option>
             <option value="consumer">Consumer App</option>
@@ -294,38 +446,71 @@ function StepProduct({ form, set, toggleMulti }: {
       <div className="field" style={{ marginTop: "1.25rem" }}>
         <label>Use cases * (select all that apply)</label>
         <div className="chip-cloud" style={{ marginTop: "0.65rem" }}>
-          {USE_CASE_OPTIONS.map((u) => (
+          {USE_CASE_OPTIONS.map((useCase) => (
             <button
-              key={u.value}
+              key={useCase.value}
               type="button"
-              className={`chip ${form.use_cases.includes(u.value) ? "chip--selected" : ""}`}
-              onClick={() => toggleMulti("use_cases", u.value)}
+              className={`chip ${form.use_cases.includes(useCase.value) ? "chip--selected" : ""}`}
+              onClick={() => toggleMulti("use_cases", useCase.value)}
             >
-              {u.label}
+              {useCase.label}
             </button>
           ))}
         </div>
       </div>
+      {preset ? (
+        <p style={{ margin: "0.8rem 0 0", color: "var(--muted)", fontSize: "0.85rem" }}>
+          If this preset is right, most users only need to adjust markets or one or two toggles before submitting.
+        </p>
+      ) : null}
     </div>
   );
 }
 
-// ── Step 2: Technical ─────────────────────────────────────────────────────────
-
-function StepTechnical({ form, set }: {
+function StepTechnical({
+  form,
+  set,
+}: {
   form: AssessmentInput;
-  set: (f: keyof AssessmentInput, v: unknown) => void;
+  set: (field: keyof AssessmentInput, value: unknown) => void;
 }) {
-  const Toggle = ({ field, label, hint }: { field: keyof AssessmentInput; label: string; hint?: string }) => (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.85rem 1rem", borderRadius: "14px", background: "rgba(255,255,255,0.72)", border: "1px solid rgba(16,32,48,0.09)" }}>
+  const Toggle = ({
+    field,
+    label,
+    hint,
+  }: {
+    field: keyof AssessmentInput;
+    label: string;
+    hint?: string;
+  }) => (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "0.85rem 1rem",
+        borderRadius: "14px",
+        background: "rgba(255,255,255,0.72)",
+        border: "1px solid rgba(16,32,48,0.09)",
+      }}
+    >
       <div>
         <p style={{ margin: 0, fontWeight: 700, color: "var(--navy)" }}>{label}</p>
-        {hint && <p style={{ margin: "0.2rem 0 0", fontSize: "0.88rem", color: "var(--muted)" }}>{hint}</p>}
+        {hint ? <p style={{ margin: "0.2rem 0 0", fontSize: "0.88rem", color: "var(--muted)" }}>{hint}</p> : null}
       </div>
       <button
         type="button"
         onClick={() => set(field, !form[field])}
-        style={{ padding: "0.5rem 1.25rem", borderRadius: "999px", border: "none", fontWeight: 700, fontSize: "0.9rem", cursor: "pointer", background: form[field] ? "var(--navy)" : "rgba(16,32,48,0.08)", color: form[field] ? "#fff" : "var(--navy)" }}
+        style={{
+          padding: "0.5rem 1.25rem",
+          borderRadius: "999px",
+          border: "none",
+          fontWeight: 700,
+          fontSize: "0.9rem",
+          cursor: "pointer",
+          background: form[field] ? "var(--navy)" : "rgba(16,32,48,0.08)",
+          color: form[field] ? "#fff" : "var(--navy)",
+        }}
       >
         {form[field] ? "Yes" : "No"}
       </button>
@@ -336,15 +521,15 @@ function StepTechnical({ form, set }: {
     <div>
       <h2 style={{ margin: "0 0 1.25rem", color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.5rem" }}>Technical Profile</h2>
       <div className="stack">
-        <Toggle field="uses_ai" label="Does your product use AI or ML?" hint="Includes ML models, LLMs, recommendation engines, etc." />
-        <Toggle field="processes_personal_data" label="Does your product process personal data?" hint="Names, emails, browsing data, IDs, behavioral data, etc." />
+        <Toggle field="uses_ai" label="Does your product use AI or ML?" hint="Includes ML models, LLMs, recommendation engines, and similar systems." />
+        <Toggle field="processes_personal_data" label="Does your product process personal data?" hint="Names, emails, IDs, behavior data, or similar user information." />
         <Toggle field="processes_eu_personal_data" label="Do you process personal data of EU/EEA residents?" />
-        <Toggle field="uses_biometric_data" label="Does your product use biometric data?" hint="Face recognition, fingerprints, voice, gait, etc." />
-        <Toggle field="automated_decisions" label="Does your product make automated decisions?" hint="Decisions with legal or similarly significant effects on individuals." />
+        <Toggle field="uses_biometric_data" label="Does your product use biometric data?" hint="Face recognition, fingerprints, voice, gait, or similar signals." />
+        <Toggle field="automated_decisions" label="Does your product make automated decisions?" hint="Decisions with legal or similarly significant effects on people." />
       </div>
       <div className="field" style={{ marginTop: "1.25rem" }}>
         <label>Your risk self-assessment</label>
-        <select value={form.risk_self_assessment} onChange={(e) => set("risk_self_assessment", e.target.value)}>
+        <select value={form.risk_self_assessment} onChange={(event) => set("risk_self_assessment", event.target.value)}>
           <option value="minimal">Minimal risk</option>
           <option value="limited">Limited risk</option>
           <option value="high">High risk</option>
@@ -355,16 +540,17 @@ function StepTechnical({ form, set }: {
   );
 }
 
-// ── Step 3: Review ────────────────────────────────────────────────────────────
-
 function StepReview({ form }: { form: AssessmentInput }) {
-  const yesNo = (v: boolean) => (v ? "Yes" : "No");
+  const preset = getProductPresetById(form.product_preset);
+  const yesNo = (value: boolean) => (value ? "Yes" : "No");
+
   return (
     <div>
       <h2 style={{ margin: "0 0 1.25rem", color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.5rem" }}>Review & Submit</h2>
       <p style={{ color: "var(--muted)", margin: "0 0 1.25rem" }}>Confirm your inputs before running the analysis.</p>
       <dl className="review-dl">
-        <ReviewRow label="HQ Region" value={form.hq_region || "—"} />
+        <ReviewRow label="Preset" value={preset?.title ?? "Blank assessment"} />
+        <ReviewRow label="HQ Region" value={form.hq_region || "-"} />
         <ReviewRow label="Company Size" value={form.company_size} />
         <ReviewRow label="Target Markets" value={form.target_markets.join(", ") || "None selected"} />
         <ReviewRow label="Product Type" value={form.product_type} />
@@ -375,11 +561,11 @@ function StepReview({ form }: { form: AssessmentInput }) {
         <ReviewRow label="Processes EU Personal Data" value={yesNo(form.processes_eu_personal_data)} />
         <ReviewRow label="Uses Biometric Data" value={yesNo(form.uses_biometric_data)} />
         <ReviewRow label="Automated Decisions" value={yesNo(form.automated_decisions)} />
-        <ReviewRow label="Risk Self-Assessment" value={form.risk_self_assessment ?? "—"} />
+        <ReviewRow label="Risk Self-Assessment" value={form.risk_self_assessment ?? "-"} />
       </dl>
       <div className="callout" style={{ marginTop: "1.25rem" }}>
         <p style={{ margin: 0, fontSize: "0.9rem" }}>
-          We&apos;ll evaluate your profile against {"{10}"} AI laws and regulations using a deterministic rules engine. Results are for informational purposes — always consult qualified legal counsel.
+          We will evaluate your profile against the tracked AI laws using a deterministic rules engine. Results are informational and should be reviewed with qualified counsel.
         </p>
       </div>
     </div>

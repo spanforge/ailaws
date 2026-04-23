@@ -1,0 +1,574 @@
+Great — here’s a **formal, handoff-quality package** you can give directly to a dev team or agency.
+This includes:
+
+* PRD (Product Requirements Document)
+* System Architecture
+* Database Schema (clean + normalized)
+* API Contract (detailed)
+* Rules Engine spec
+* Dev milestones + tickets (so they can start immediately)
+
+---
+
+# 📘 1. PRODUCT REQUIREMENTS DOCUMENT (PRD)
+
+## 1.1 Product Name
+
+**SpanForge AI Laws Explorer (LexForge)**
+
+## 1.2 Objective
+
+Build a web platform that:
+
+1. Structures and exposes AI laws globally
+2. Enables search, filtering, and comparison
+3. Generates product-specific compliance outputs
+
+---
+
+## 1.3 Success Metrics (define this early)
+
+### Acquisition
+
+* Organic traffic (SEO law pages)
+* % users using search
+
+### Activation
+
+* % users viewing law detail page
+* % users starting assessment
+
+### Engagement
+
+* Avg session duration
+* Laws viewed per session
+
+### Conversion
+
+* % users completing assessment
+* % converting to paid
+
+---
+
+## 1.4 MVP Scope (STRICT)
+
+### Must ship
+
+* Law explorer (search + filters)
+* Law detail pages
+* Admin content system
+* Assessment wizard
+* Rules engine (basic)
+* Checklist generator
+* Auth
+
+### Must NOT ship
+
+* AI chat assistant
+* enterprise workflows
+* complex automation
+
+---
+
+## 1.5 User Flow (Critical)
+
+### Flow A: Explorer
+
+```
+Landing → Search → Results → Law Page → Save / Compare
+```
+
+### Flow B: Assessment
+
+```
+Landing → “Check applicability” → Form → Submit → Results → Checklist
+```
+
+### Flow C: Retention
+
+```
+Login → Dashboard → Saved Laws / Assessments → Alerts
+```
+
+---
+
+# 🏗️ 2. SYSTEM ARCHITECTURE
+
+## 2.1 High-Level Architecture
+
+```
+Frontend (Next.js)
+        ↓
+API Layer (Node / Next API)
+        ↓
+--------------------------------
+|  Core Services              |
+|-----------------------------|
+| Laws Service               |
+| Obligations Service        |
+| Assessment Service         |
+| Rules Engine               |
+| Checklist Service          |
+| Updates Service            |
+--------------------------------
+        ↓
+Database (PostgreSQL)
+        ↓
+Search Layer (Postgres FTS → later Meilisearch)
+```
+
+---
+
+## 2.2 Service Separation (important)
+
+### Laws Service
+
+* CRUD laws
+* fetch details
+* filtering
+
+### Assessment Service
+
+* store user inputs
+* trigger rules engine
+* store results
+
+### Rules Engine
+
+* evaluate applicability
+* return structured matches
+
+### Checklist Service
+
+* map obligations → actionable tasks
+
+---
+
+## 2.3 Optional Infra (v1.5)
+
+* Redis (caching + queues)
+* Queue worker (for async assessments)
+* CDN (law pages)
+
+---
+
+# 🗄️ 3. DATABASE SCHEMA (PRODUCTION-READY)
+
+Below is a clean, normalized schema your dev can implement directly.
+
+---
+
+## 3.1 laws
+
+```sql
+CREATE TABLE laws (
+  id UUID PRIMARY KEY,
+  slug TEXT UNIQUE,
+  title TEXT NOT NULL,
+  short_title TEXT,
+  jurisdiction_id UUID,
+  issuing_body TEXT,
+  status TEXT,
+  content_type TEXT,
+  summary_short TEXT,
+  summary_long TEXT,
+  official_url TEXT,
+  adopted_date DATE,
+  effective_date DATE,
+  last_reviewed_at TIMESTAMP,
+  is_published BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+## 3.2 obligations
+
+```sql
+CREATE TABLE obligations (
+  id UUID PRIMARY KEY,
+  law_id UUID REFERENCES laws(id),
+  title TEXT,
+  description TEXT,
+  category TEXT,
+  priority TEXT,
+  severity TEXT,
+  citation TEXT,
+  action_required TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+## 3.3 applicability_rules
+
+```sql
+CREATE TABLE applicability_rules (
+  id UUID PRIMARY KEY,
+  law_id UUID REFERENCES laws(id),
+  name TEXT,
+  rule_json JSONB,
+  weight FLOAT DEFAULT 1,
+  enabled BOOLEAN DEFAULT true
+);
+```
+
+---
+
+## 3.4 assessments
+
+```sql
+CREATE TABLE assessments (
+  id UUID PRIMARY KEY,
+  user_id UUID,
+  company_profile JSONB,
+  product_profile JSONB,
+  technical_profile JSONB,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+## 3.5 assessment_results
+
+```sql
+CREATE TABLE assessment_results (
+  id UUID PRIMARY KEY,
+  assessment_id UUID REFERENCES assessments(id),
+  law_id UUID REFERENCES laws(id),
+  relevance_score FLOAT,
+  applicability_status TEXT,
+  rationale TEXT,
+  triggered_conditions JSONB,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+## 3.6 checklists
+
+```sql
+CREATE TABLE checklists (
+  id UUID PRIMARY KEY,
+  assessment_id UUID,
+  title TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+## 3.7 checklist_items
+
+```sql
+CREATE TABLE checklist_items (
+  id UUID PRIMARY KEY,
+  checklist_id UUID,
+  obligation_id UUID,
+  title TEXT,
+  description TEXT,
+  status TEXT DEFAULT 'not_started',
+  priority TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+# 🔌 4. API CONTRACT (DETAILED)
+
+## 4.1 Laws
+
+### GET /laws
+
+Query:
+
+```
+?search=ai&jurisdiction=EU&topic=privacy&page=1
+```
+
+Response:
+
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "title": "EU AI Act",
+      "summary_short": "Regulates AI systems...",
+      "jurisdiction": "EU"
+    }
+  ]
+}
+```
+
+---
+
+### GET /laws/:slug
+
+Returns:
+
+```json
+{
+  "title": "EU AI Act",
+  "summary_long": "...",
+  "obligations": [...],
+  "dates": {...}
+}
+```
+
+---
+
+## 4.2 Assessment
+
+### POST /assessments
+
+```json
+{
+  "company_profile": {...},
+  "product_profile": {...},
+  "technical_profile": {...}
+}
+```
+
+---
+
+### POST /assessments/:id/run
+
+Response:
+
+```json
+{
+  "results": [
+    {
+      "law": "EU AI Act",
+      "status": "likely_applies",
+      "score": 0.87,
+      "rationale": "Targets EU users + high-risk use case"
+    }
+  ]
+}
+```
+
+---
+
+## 4.3 Checklist
+
+### POST /checklists
+
+```json
+{
+  "assessment_id": "uuid"
+}
+```
+
+---
+
+### PATCH /checklists/:id/items/:itemId
+
+```json
+{
+  "status": "completed"
+}
+```
+
+---
+
+# 🧠 5. RULES ENGINE SPEC
+
+## 5.1 Core Principle
+
+Deterministic > AI
+
+---
+
+## 5.2 Rule Structure
+
+```json
+{
+  "all": [
+    {
+      "fact": "target_geographies",
+      "operator": "contains",
+      "value": "EU"
+    },
+    {
+      "fact": "use_case",
+      "operator": "in",
+      "value": ["hr", "recruitment"]
+    }
+  ]
+}
+```
+
+---
+
+## 5.3 Engine Logic
+
+Pseudo-code:
+
+```
+for each law:
+  for each rule:
+    evaluate(rule, input)
+    if match:
+      score += weight
+
+final_score = normalize(score)
+status = map_to_status(final_score)
+```
+
+---
+
+## 5.4 Status Mapping
+
+| Score    | Status         |
+| -------- | -------------- |
+| >0.75    | likely_applies |
+| 0.4–0.75 | may_apply      |
+| <0.4     | unlikely       |
+
+---
+
+# 🧩 6. CHECKLIST GENERATION LOGIC
+
+```
+for each applicable law:
+  fetch obligations
+  map obligations → checklist items
+  assign priority
+  group by category
+```
+
+---
+
+# 🎯 7. FRONTEND COMPONENTS
+
+## Pages
+
+* `/explore`
+* `/laws/[slug]`
+* `/compare`
+* `/assess`
+* `/dashboard`
+
+## Core Components
+
+* SearchBar
+* FilterPanel
+* LawCard
+* ObligationCard
+* AssessmentForm
+* ResultCard
+* ChecklistView
+
+---
+
+# ⚙️ 8. DEV TASK BREAKDOWN
+
+## Sprint 1 (Week 1–2)
+
+* Auth
+* DB setup
+* Laws CRUD
+* Basic UI
+
+## Sprint 2
+
+* Search + filters
+* Law detail page
+
+## Sprint 3
+
+* Assessment form
+* Rules engine v1
+
+## Sprint 4
+
+* Results UI
+* Checklist generator
+
+## Sprint 5
+
+* Admin panel
+* polish + QA
+
+---
+
+# 🧪 9. TESTING REQUIREMENTS
+
+## Unit
+
+* rules engine logic
+* API responses
+
+## Integration
+
+* assessment → results
+* checklist generation
+
+## E2E
+
+* search → law page
+* assessment flow
+
+---
+
+# 🚀 10. DEPLOYMENT
+
+## Environments
+
+* dev
+* staging
+* production
+
+## CI/CD
+
+* GitHub Actions
+* auto deploy on main
+
+---
+
+# 🔐 11. SECURITY
+
+* JWT or session auth
+* RBAC for admin
+* input validation
+* rate limiting on assessments
+
+---
+
+# 📦 12. FINAL HANDOFF SUMMARY (for dev)
+
+> Build a Next.js + PostgreSQL app where:
+>
+> * Laws are structured and searchable
+> * Users can run a questionnaire
+> * A rules engine determines applicable laws
+> * A checklist is generated from obligations
+
+---
+
+# 🧠 What you should do next
+
+You now have something most founders don’t:
+👉 a **real build spec**
+
+Next step (important):
+
+1. **Hire 1–2 devs or use an agency**
+2. Give them ONLY MVP scope
+3. Push to launch in **3–4 weeks max**
+
+---
+
+If you want next:
+
+* I can convert this into a **Notion sprint board**
+* or design **exact UI screens (Figma-level)** so devs don’t guess
+* or define **pricing + GTM so this actually makes money fast**

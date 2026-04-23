@@ -51,6 +51,7 @@ export async function POST(req: NextRequest) {
           target_markets: body.target_markets,
         }),
         productProfile: JSON.stringify({
+          product_preset: body.product_preset ?? "",
           product_type: body.product_type,
           use_cases: body.use_cases,
           deployment_context: body.deployment_context,

@@ -1,21 +1,29 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getLawBySlug } from "@/lib/lexforge-data";
-import { runRulesEngine } from "@/lib/rules-engine";
 import { laws } from "@/lib/lexforge-data";
-import type { AssessmentResult } from "@/lib/rules-engine";
+import { runRulesEngine, type AssessmentInput, type AssessmentResult } from "@/lib/rules-engine";
+import {
+  buildActionPlan,
+  buildKeySources,
+  buildPenaltySnapshot,
+  buildProductSummary,
+  enrichAssessmentResults,
+  getActionTimelineLabel,
+  getProductPresetById,
+} from "@/lib/smb";
+import { PrintButton, PrintTrigger } from "@/components/print-trigger";
 
 export const dynamic = "force-dynamic";
 
-const STATUS_LABEL: Record<string, string> = {
-  likely_applies: "Likely Applies",
-  may_apply: "May Apply",
-  unlikely: "Unlikely",
-};
-
-const PRIORITY_ORDER = ["critical", "high", "medium", "low"];
-
 type PrintPageProps = { params: Promise<{ id: string }> };
+
+function parseAssessmentInput(companyProfile: string, productProfile: string, technicalProfile: string): AssessmentInput {
+  return {
+    ...JSON.parse(companyProfile ?? "{}"),
+    ...JSON.parse(productProfile ?? "{}"),
+    ...JSON.parse(technicalProfile ?? "{}"),
+  } as AssessmentInput;
+}
 
 export default async function PrintPage({ params }: PrintPageProps) {
   const { id } = await params;
@@ -24,256 +32,266 @@ export default async function PrintPage({ params }: PrintPageProps) {
     where: { id },
     include: { results: true },
   });
+
   if (!assessment) notFound();
 
-  // Reconstruct results with full obligation data by re-running the engine
-  // using stored profile data, or fall back to DB results without obligations
-  let results: AssessmentResult[] = [];
-  try {
-    const profile = {
-      ...JSON.parse(assessment.companyProfile ?? "{}"),
-      ...JSON.parse(assessment.productProfile ?? "{}"),
-      ...JSON.parse(assessment.technicalProfile ?? "{}"),
-    };
-    // Ensure required fields have defaults
-    if (profile.hq_region && profile.target_markets) {
-      results = runRulesEngine(laws, {
-        hq_region: profile.hq_region ?? "",
-        company_size: profile.company_size ?? "startup",
-        target_markets: profile.target_markets ?? [],
-        product_type: profile.product_type ?? "saas",
-        use_cases: profile.use_cases ?? [],
-        deployment_context: profile.deployment_context ?? "public",
-        uses_ai: profile.uses_ai ?? true,
-        uses_biometric_data: profile.uses_biometric_data ?? false,
-        processes_personal_data: profile.processes_personal_data ?? false,
-        processes_eu_personal_data: profile.processes_eu_personal_data ?? false,
-        automated_decisions: profile.automated_decisions ?? false,
-      });
-    }
-  } catch {
-    // Fallback: use DB results without obligations
-    results = assessment.results.map((r) => {
-      const law = getLawBySlug(r.lawSlug);
-      return {
-        law_id: r.lawSlug,
-        law_slug: r.lawSlug,
-        law_title: law?.title ?? r.lawSlug,
-        law_short_title: law?.short_title ?? r.lawSlug,
-        jurisdiction: law?.jurisdiction ?? "",
-        jurisdiction_code: law?.jurisdiction_code ?? "",
-        relevance_score: r.relevanceScore ?? 0,
-        applicability_status: r.applicabilityStatus as AssessmentResult["applicability_status"],
-        rationale: r.rationale ?? "",
-        triggered_rules: [],
-        triggered_obligations: [],
-      };
-    });
-  }
-
-  const applicable = results.filter((r) => r.applicability_status === "likely_applies");
-  const mayApply = results.filter((r) => r.applicability_status === "may_apply");
-  const unlikely = results.filter((r) => r.applicability_status === "unlikely");
-  const allObligations = [...applicable, ...mayApply].flatMap((r) =>
-    (r.triggered_obligations ?? []).map((o) => ({ ...o, lawShortTitle: r.law_short_title }))
-  );
-  const criticalCount = allObligations.filter((o) => o.priority === "critical").length;
-  const date = new Date(assessment.createdAt).toLocaleDateString("en-GB", {
-    day: "2-digit", month: "long", year: "numeric",
+  const input = parseAssessmentInput(assessment.companyProfile, assessment.productProfile, assessment.technicalProfile);
+  const results: AssessmentResult[] = runRulesEngine(laws, input);
+  const enriched = enrichAssessmentResults(results, input);
+  const applicable = enriched.filter((result) => result.applicability_status === "likely_applies");
+  const mayApply = enriched.filter((result) => result.applicability_status === "may_apply");
+  const actionPlan = buildActionPlan(results);
+  const penalties = buildPenaltySnapshot(results);
+  const sources = buildKeySources(results);
+  const preset = getProductPresetById(input.product_preset);
+  const createdAt = new Date(assessment.createdAt).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
   });
 
   return (
-    <html lang="en">
-      <head>
-        <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>LexForge Compliance Report — {date}</title>
-        <style>{printStyles}</style>
-        <script dangerouslySetInnerHTML={{ __html: "window.onload=()=>window.print()" }} />
-      </head>
-      <body>
-        {/* Cover */}
-        <div className="cover">
-          <div className="brand">LexForge</div>
-          <h1>AI Compliance Report</h1>
-          <p className="meta">Generated {date} · Assessment ID {id.slice(0, 8).toUpperCase()}</p>
+    <>
+      <PrintTrigger />
+      <style>{printStyles}</style>
+      <main className="print-page">
+        <div className="print-toolbar">
+          <PrintButton />
         </div>
 
-        {/* Executive summary */}
-        <section>
-          <h2>Executive Summary</h2>
-          <table className="summary-table">
-            <tbody>
-              <tr>
-                <th>Laws assessed</th>
-                <td>{results.length}</td>
-                <th>Likely applicable</th>
-                <td className="red">{applicable.length}</td>
-              </tr>
-              <tr>
-                <th>May apply</th>
-                <td className="amber">{mayApply.length}</td>
-                <th>Unlikely</th>
-                <td className="green">{unlikely.length}</td>
-              </tr>
-              <tr>
-                <th>Critical obligations</th>
-                <td className="red">{criticalCount}</td>
-                <th>Total obligations</th>
-                <td>{allObligations.length}</td>
-              </tr>
-            </tbody>
-          </table>
+        <section className="cover page-break-after">
+          <div className="brand">LexForge</div>
+          <h1>Compliance Snapshot</h1>
+          <p className="subhead">Founder-ready summary for AI law exposure, next actions, and source links.</p>
+          <div className="cover-grid">
+            <div className="metric">
+              <span>Assessment date</span>
+              <strong>{createdAt}</strong>
+            </div>
+            <div className="metric">
+              <span>Preset</span>
+              <strong>{preset?.title ?? "Custom assessment"}</strong>
+            </div>
+            <div className="metric">
+              <span>Likely applies</span>
+              <strong>{applicable.length}</strong>
+            </div>
+            <div className="metric">
+              <span>Urgent actions</span>
+              <strong>{actionPlan.topUrgentActions.length}</strong>
+            </div>
+          </div>
         </section>
 
-        {/* Results */}
         <section>
-          <h2>Regulatory Analysis</h2>
-          {results
-            .filter((r) => r.applicability_status !== "unlikely")
-            .map((r) => (
-              <div key={r.law_id} className="law-block">
-                <div className="law-header">
-                  <div>
-                    <span className={`badge badge-${r.applicability_status}`}>{STATUS_LABEL[r.applicability_status]}</span>
-                    <strong className="law-title">{r.law_short_title}</strong>
-                    <span className="jx">{r.jurisdiction}</span>
-                  </div>
-                  <span className="score">{Math.round(r.relevance_score * 100)}%</span>
-                </div>
-                <p className="rationale">{r.rationale}</p>
-                {(r.triggered_obligations ?? []).length > 0 && (
-                  <div className="obligations">
-                    {r.triggered_obligations.map((o) => (
-                      <div key={o.id} className="obligation-row">
-                        <span className={`pri pri-${o.priority}`}>{o.priority}</span>
-                        <div>
-                          <strong>{o.title}</strong>
-                          {o.action_required && <p className="action">Action: {o.action_required}</p>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+          <h2>One-Page Summary</h2>
+          <div className="two-col">
+            <div className="panel">
+              <h3>Product summary</h3>
+              <p>{buildProductSummary(input)}</p>
+            </div>
+            <div className="panel">
+              <h3>Top risks</h3>
+              <ul>
+                {applicable.slice(0, 3).map((result) => (
+                  <li key={result.law_id}>
+                    <strong>{result.law_short_title}:</strong> {result.plainSummary}
+                  </li>
+                ))}
+                {applicable.length === 0 && mayApply.length > 0
+                  ? mayApply.slice(0, 3).map((result) => (
+                      <li key={result.law_id}>
+                        <strong>{result.law_short_title}:</strong> {result.plainSummary}
+                      </li>
+                    ))
+                  : null}
+              </ul>
+            </div>
+          </div>
 
-          {unlikely.length > 0 && (
-            <>
-              <h3 style={{ marginTop: "1.5rem" }}>Unlikely to apply</h3>
-              <ul className="unlikely-list">
-                {unlikely.map((r) => (
-                  <li key={r.law_id}>{r.law_short_title} — {r.jurisdiction}</li>
+          <div className="two-col">
+            <div className="panel">
+              <h3>Top applicable laws</h3>
+              <ul>
+                {[...applicable, ...mayApply].slice(0, 5).map((result) => (
+                  <li key={result.law_id}>
+                    <strong>{result.law_short_title}</strong> - {result.whoThisAppliesTo}
+                  </li>
                 ))}
               </ul>
-            </>
-          )}
+            </div>
+            <div className="panel">
+              <h3>Urgent actions</h3>
+              <ul>
+                {actionPlan.topUrgentActions.map((action) => (
+                  <li key={action.id}>
+                    <strong>{action.title}</strong> - {action.owner}, {action.effort} effort
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          <div className="two-col">
+            <div className="panel">
+              <h3>Penalties snapshot</h3>
+              <ul>
+                {penalties.map((penalty) => (
+                  <li key={penalty.lawSlug}>
+                    <strong>{penalty.lawShortTitle}:</strong> {penalty.summary}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="panel">
+              <h3>Key sources</h3>
+              <ul>
+                {sources.map((source) => (
+                  <li key={source.url}>
+                    <strong>{source.title}</strong>
+                    <div className="source-url">{source.url}</div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
         </section>
 
-        {/* Key Actions */}
-        {allObligations.length > 0 && (
-          <section className="page-break">
-            <h2>Key Actions</h2>
-            {PRIORITY_ORDER.filter((p) => allObligations.some((o) => o.priority === p)).map((priority) => (
-              <div key={priority}>
-                <h3 className={`priority-heading pri-${priority}`}>{priority.charAt(0).toUpperCase() + priority.slice(1)} Priority</h3>
-                {allObligations
-                  .filter((o) => o.priority === priority)
-                  .map((o) => (
-                    <div key={`${o.lawShortTitle}-${o.id}`} className="action-block">
-                      <div className="action-meta">
-                        <span className="action-law">{o.lawShortTitle}</span>
-                        <span className="action-cat">{o.category}</span>
-                        {o.citation && <span className="action-cite">{o.citation}</span>}
-                      </div>
-                      <strong>{o.title}</strong>
-                      <p>{o.description}</p>
-                      {o.action_required && (
-                        <div className="action-callout">
-                          <strong>Action: </strong>{o.action_required}
-                        </div>
-                      )}
+        <section className="page-break-before">
+          <h2>Action Plan</h2>
+          {(["this_week", "this_month", "later"] as const).map((timeline) => {
+            const items = actionPlan.groupedActions[timeline];
+            if (items.length === 0) return null;
+
+            return (
+              <div key={timeline} className="timeline-group">
+                <h3>{getActionTimelineLabel(timeline)}</h3>
+                {items.map((action) => (
+                  <div key={action.id} className="action-card">
+                    <div className="action-meta">
+                      <span>{action.owner}</span>
+                      <span>{action.urgency}</span>
+                      <span>{action.effort} effort</span>
+                      <span>{action.lawShortTitle}</span>
                     </div>
-                  ))}
+                    <strong>{action.title}</strong>
+                    <p>{action.whyItMatters}</p>
+                    {action.citation ? <div className="citation">{action.citation}</div> : null}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </section>
+
+        <section>
+          <h2>Detailed Results</h2>
+          {enriched
+            .filter((result) => result.applicability_status !== "unlikely")
+            .map((result) => (
+              <div key={result.law_id} className="result-card">
+                <div className="result-header">
+                  <div>
+                    <span className={`badge badge-${result.applicability_status}`}>{result.applicability_status.replace(/_/g, " ")}</span>
+                    <strong>{result.law_short_title}</strong>
+                  </div>
+                  <span className="score">{Math.round(result.relevance_score * 100)}%</span>
+                </div>
+                <p>{result.plainSummary}</p>
+                <div className="detail-grid">
+                  <div>
+                    <strong>Who this applies to</strong>
+                    <p>{result.whoThisAppliesTo}</p>
+                  </div>
+                  <div>
+                    <strong>Why you matched</strong>
+                    <p>{result.whyYouMatched}</p>
+                  </div>
+                  <div>
+                    <strong>What to do first</strong>
+                    <p>{result.whatToDoFirst}</p>
+                  </div>
+                </div>
+                <p className="legal">{result.legalDetails}</p>
               </div>
             ))}
-          </section>
-        )}
+        </section>
 
-        {/* Footer */}
         <footer>
-          <p>Generated by LexForge · lexforge.io · This report is for informational purposes only and does not constitute legal advice.</p>
+          This report is informational only and does not constitute legal advice. Review applicable laws and templates with qualified counsel.
         </footer>
-      </body>
-    </html>
+      </main>
+    </>
   );
 }
 
 const printStyles = `
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Georgia, 'Times New Roman', serif; font-size: 11pt; color: #0f1e30; background: #fff; padding: 0; }
-  h1 { font-size: 28pt; font-weight: 700; margin: 0.5rem 0; }
-  h2 { font-size: 16pt; font-weight: 700; border-bottom: 2px solid #0f1e30; padding-bottom: 0.35rem; margin: 1.5rem 0 0.85rem; }
-  h3 { font-size: 12pt; font-weight: 700; margin: 1rem 0 0.5rem; }
-  p { line-height: 1.5; margin: 0.35rem 0; }
-
-  .cover { padding: 3cm 2cm 2cm; border-bottom: 4px solid #0f1e30; margin-bottom: 1rem; }
-  .brand { font-size: 13pt; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #e63946; margin-bottom: 0.5rem; }
-  .meta { color: #555; font-size: 10pt; margin-top: 0.5rem; }
-
-  section { padding: 0.5rem 2cm; }
-  .page-break { page-break-before: always; padding-top: 1rem; }
-
-  .summary-table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
-  .summary-table th { text-align: left; font-size: 10pt; color: #555; padding: 0.4rem 0.75rem 0.4rem 0; width: 28%; }
-  .summary-table td { font-size: 13pt; font-weight: 700; padding: 0.4rem 0.75rem 0.4rem 0; }
-  .red { color: #e63946; }
-  .amber { color: #915a1e; }
-  .green { color: #2a7b62; }
-
-  .law-block { border: 1px solid #dde; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 0.75rem; page-break-inside: avoid; }
-  .law-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.4rem; }
-  .law-title { font-size: 12pt; font-weight: 700; margin: 0 0.5rem; }
-  .jx { font-size: 9pt; color: #666; }
-  .score { font-size: 18pt; font-weight: 700; color: #0f1e30; white-space: nowrap; }
-  .rationale { font-size: 9.5pt; color: #444; margin-bottom: 0.5rem; }
-
-  .badge { display: inline-block; font-size: 8pt; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 999px; margin-right: 0.25rem; }
+  body {
+    margin: 0;
+    background: #f4f1eb;
+    color: #102030;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 11pt;
+  }
+  .print-page {
+    max-width: 980px;
+    margin: 0 auto;
+    background: #fff;
+    min-height: 100vh;
+    box-shadow: 0 18px 48px rgba(16, 32, 48, 0.08);
+  }
+  .print-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    justify-content: flex-end;
+    padding: 1rem 1.4cm;
+    background: rgba(244, 241, 235, 0.96);
+    border-bottom: 1px solid #ded9d0;
+  }
+  .print-toolbar button {
+    border: none;
+    border-radius: 999px;
+    background: #102030;
+    color: #fff;
+    cursor: pointer;
+    font: inherit;
+    font-size: 10pt;
+    font-weight: 700;
+    padding: 0.6rem 1rem;
+  }
+  * { box-sizing: border-box; }
+  section { padding: 1rem 1.4cm; }
+  h1 { margin: 0 0 0.5rem; font-size: 28pt; }
+  h2 { font-size: 16pt; margin: 0 0 0.8rem; border-bottom: 2px solid #102030; padding-bottom: 0.25rem; }
+  h3 { font-size: 12pt; margin: 0 0 0.45rem; }
+  p, li { line-height: 1.45; }
+  ul { margin: 0; padding-left: 1.1rem; }
+  .cover { padding-top: 2.4cm; padding-bottom: 2cm; background: #f7f4ee; border-bottom: 4px solid #102030; }
+  .brand { text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; color: #b94d2d; }
+  .subhead { color: #4c5a67; max-width: 34rem; }
+  .cover-grid, .two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; margin-top: 0.9rem; }
+  .metric, .panel, .action-card, .result-card { border: 1px solid #d9dde2; border-radius: 8px; padding: 0.7rem 0.85rem; background: #fff; }
+  .metric span { display: block; font-size: 8.5pt; color: #65717c; text-transform: uppercase; letter-spacing: 0.04em; }
+  .metric strong { display: block; margin-top: 0.2rem; font-size: 13pt; }
+  .timeline-group { margin-bottom: 1rem; }
+  .action-meta, .result-header { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .action-meta span { font-size: 8pt; color: #4c5a67; border: 1px solid #d9dde2; border-radius: 999px; padding: 0.1rem 0.4rem; text-transform: capitalize; }
+  .citation, .source-url, .legal { font-size: 9pt; color: #4c5a67; }
+  .result-header { justify-content: space-between; align-items: center; }
+  .badge { display: inline-block; padding: 0.12rem 0.45rem; border-radius: 999px; font-size: 8pt; margin-right: 0.35rem; text-transform: capitalize; }
   .badge-likely_applies { background: #fde8ea; color: #c1121f; }
   .badge-may_apply { background: #fef3e2; color: #7d4e00; }
-  .badge-unlikely { background: #e8f5ef; color: #1d6e52; }
-
-  .obligations { border-top: 1px solid #eee; padding-top: 0.5rem; margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.4rem; }
-  .obligation-row { display: flex; gap: 0.6rem; align-items: flex-start; font-size: 9.5pt; }
-  .pri { display: inline-block; font-size: 7.5pt; font-weight: 700; padding: 0.1rem 0.4rem; border-radius: 999px; white-space: nowrap; margin-top: 0.1rem; }
-  .pri-critical { background: #fde8ea; color: #c1121f; }
-  .pri-high { background: #fef3e2; color: #7d4e00; }
-  .pri-medium { background: #e8f0fe; color: #1a56db; }
-  .pri-low { background: #e8f5ef; color: #1d6e52; }
-  .action { font-size: 9pt; color: #444; margin-top: 0.2rem; }
-
-  .unlikely-list { font-size: 9.5pt; color: #555; padding-left: 1.25rem; }
-  .unlikely-list li { margin-bottom: 0.2rem; }
-
-  .action-block { border-left: 3px solid #dde; padding: 0.6rem 0.75rem; margin-bottom: 0.65rem; page-break-inside: avoid; }
-  .action-meta { display: flex; gap: 0.75rem; font-size: 8.5pt; color: #666; margin-bottom: 0.35rem; }
-  .action-law { font-weight: 700; color: #0f1e30; }
-  .action-cat { font-style: italic; }
-  .action-cite { margin-left: auto; }
-  .action-callout { background: #e8f5ef; border-left: 3px solid #2a7b62; padding: 0.4rem 0.65rem; margin-top: 0.4rem; font-size: 9pt; }
-  .priority-heading { font-size: 11pt; }
-  .priority-heading.pri-critical { color: #c1121f; }
-  .priority-heading.pri-high { color: #7d4e00; }
-  .priority-heading.pri-medium { color: #1a56db; }
-  .priority-heading.pri-low { color: #1d6e52; }
-
-  footer { margin-top: 2rem; padding: 0.75rem 2cm; border-top: 1px solid #dde; font-size: 8pt; color: #888; }
-
+  .score { font-weight: 700; }
+  .detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.7rem; margin-top: 0.6rem; }
+  footer { padding: 1rem 1.4cm 1.6rem; font-size: 8.5pt; color: #6b7580; }
+  .page-break-before { page-break-before: always; }
+  .page-break-after { page-break-after: always; }
   @media print {
-    @page { margin: 1.5cm 1.5cm; size: A4; }
-    body { padding: 0; }
-    section { padding: 0; }
-    .cover { padding: 0 0 1.5rem; }
-    .page-break { page-break-before: always; }
+    @page { size: A4; margin: 1cm; }
+    body { background: #fff; }
+    .print-page { max-width: none; box-shadow: none; }
+    .print-toolbar { display: none; }
   }
 `;

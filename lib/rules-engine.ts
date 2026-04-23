@@ -8,6 +8,7 @@ import type { Law, RuleCondition, RuleGroup } from "./lexforge-data";
 export type AssessmentInput = {
   // Company
   company_name?: string;
+  product_preset?: string;
   hq_region: string; // EU | US | UK | CA | CN | BR | SG | AU | Other
   company_size: "startup" | "sme" | "large" | "enterprise";
   industry?: string;

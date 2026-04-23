@@ -8,7 +8,9 @@ import type { ReactNode } from "react";
 const navLinks = [
   { href: "/explore", label: "Laws" },
   { href: "/assess", label: "Assess" },
+  { href: "/templates", label: "Templates" },
   { href: "/compare", label: "Compare" },
+  { href: "/methodology", label: "Methodology" },
   { href: "/guides", label: "Guides" },
   { href: "/map", label: "Map" },
   { href: "/timeline", label: "Timeline" },
@@ -18,6 +20,11 @@ const navLinks = [
 export function SiteShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const isPrintRoute = pathname.includes("/print");
+
+  if (isPrintRoute) {
+    return <div id="main-content">{children}</div>;
+  }
 
   return (
     <>
@@ -85,6 +92,8 @@ export function SiteShell({ children }: { children: ReactNode }) {
             <div className="footer-nav__col">
               <p className="footer-nav__col-heading">Compliance</p>
               <Link href="/assess">Assessment Wizard</Link>
+              <Link href="/templates">Templates</Link>
+              <Link href="/methodology">Methodology</Link>
               <Link href="/guides">Sector Guides</Link>
               <Link href="/penalties">Penalty Calculator</Link>
               <Link href="/glossary">Glossary</Link>
@@ -100,4 +109,3 @@ export function SiteShell({ children }: { children: ReactNode }) {
     </>
   );
 }
-

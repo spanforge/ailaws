@@ -1,39 +1,93 @@
 import Link from "next/link";
 import { laws } from "@/lib/lexforge-data";
+import { TEMPLATE_LIBRARY } from "@/lib/smb";
 
 export const metadata = {
-  title: "AI Laws Explorer — LexForge",
+  title: "AI Compliance for Startups and SMBs - LexForge",
   description:
-    "Track, compare, and assess compliance across global AI regulations. Your central hub for AI law intelligence.",
+    "Find which AI laws apply to your product, what to do next, and what your team can download today without enterprise compliance overhead.",
 };
 
+const useCases = [
+  {
+    title: "AI SaaS selling into the EU",
+    body: "Figure out whether the EU AI Act, GDPR, and product-liability rules matter before a customer asks.",
+  },
+  {
+    title: "Hiring or healthcare workflows",
+    body: "Spot higher-risk use cases early, assign owners, and leave with a concrete remediation list instead of raw citations.",
+  },
+  {
+    title: "Founder-led launch readiness",
+    body: "Turn one assessment into a founder-ready PDF, a prioritized action plan, and starter templates for ops and product.",
+  },
+];
+
+const trustPoints = [
+  "Deterministic rules engine with source-linked results",
+  "Plain-English summaries before legal detail",
+  "Templates and exports designed for small teams",
+  "Review dates and methodology surfaced across key pages",
+];
+
 export default function HomePage() {
-  const recentLaws = laws.slice(0, 4);
-  const enacted = laws.filter((l) => l.status === "in_force" || l.status === "enacted").length;
-  const proposed = laws.filter((l) => l.status === "proposed" || l.status === "draft").length;
+  const enacted = laws.filter((law) => law.status === "in_force" || law.status === "enacted").length;
+  const proposed = laws.filter((law) => law.status === "proposed" || law.status === "draft").length;
 
   return (
     <main className="page">
       <div className="shell" style={{ paddingTop: "2.5rem" }}>
-        <p className="kicker">Dashboard</p>
-        <h1
+        <section
+          className="cta-banner"
           style={{
-            margin: "0.4rem 0 0.5rem",
-            color: "var(--navy)",
-            fontFamily: "var(--font-heading)",
-            fontSize: "clamp(1.8rem, 3.5vw, 2.8rem)",
-            lineHeight: 1.08,
-            letterSpacing: "-0.03em",
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1.2fr) minmax(280px, 0.8fr)",
+            gap: "1.5rem",
+            alignItems: "stretch",
+            padding: "2rem",
           }}
         >
-          AI Law Intelligence Hub
-        </h1>
-        <p style={{ color: "var(--muted)", margin: "0 0 2rem" }}>
-          Your central view of the global AI regulatory landscape.
-        </p>
+          <div>
+            <p className="eyebrow">For founders, startups, and SMB teams</p>
+            <h1
+              style={{
+                margin: "0.3rem 0 0.75rem",
+                color: "var(--navy)",
+                fontFamily: "var(--font-heading)",
+                fontSize: "clamp(2rem, 5vw, 4rem)",
+                lineHeight: 0.98,
+                letterSpacing: "-0.04em",
+                maxWidth: "12ch",
+              }}
+            >
+              AI compliance without enterprise overhead
+            </h1>
+            <p style={{ color: "var(--muted)", fontSize: "1.05rem", maxWidth: "58ch", lineHeight: 1.6, margin: 0 }}>
+              LexForge is the fastest way for small teams to figure out which AI laws apply to their product, what to do this week,
+              and what they can share with customers, cofounders, or counsel today.
+            </p>
+            <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginTop: "1.25rem" }}>
+              <Link href="/assess" className="button button--primary" style={{ fontSize: "0.95rem", padding: "0.75rem 1.2rem" }}>
+                Start free assessment →
+              </Link>
+              <Link href="/methodology" className="button" style={{ fontSize: "0.95rem", padding: "0.75rem 1.2rem" }}>
+                View methodology
+              </Link>
+            </div>
+          </div>
+          <div className="content-card" style={{ padding: "1.2rem 1.25rem", alignSelf: "stretch" }}>
+            <p style={{ margin: "0 0 0.35rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+              What you leave with
+            </p>
+            <div className="stack">
+              <SnapshotItem title="Top laws" body="Likely-applicable and may-apply laws explained in plain English." />
+              <SnapshotItem title="Action plan" body="Top 3 urgent actions, grouped by this week, this month, and later." />
+              <SnapshotItem title="Shareable output" body="Founder-ready PDF, CSV exports, and small-team templates." />
+            </div>
+          </div>
+        </section>
 
-        {/* Stats */}
-        <div className="stats-grid" style={{ marginBottom: "2.5rem" }}>
+        <div className="stats-grid" style={{ margin: "2rem 0 2.5rem" }}>
           <div className="stat-card">
             <strong>{laws.length}</strong>
             <span>Laws tracked</span>
@@ -46,134 +100,95 @@ export default function HomePage() {
             <strong style={{ color: "#915a1e" }}>{proposed}</strong>
             <span>Proposed / draft</span>
           </div>
-        </div>
-
-        {/* Quick actions */}
-        <div className="section-heading">
-          <h2
-            style={{
-              margin: 0,
-              fontFamily: "var(--font-heading)",
-              color: "var(--navy)",
-              fontSize: "1.45rem",
-            }}
-          >
-            Quick actions
-          </h2>
-        </div>
-        <div className="card-grid" style={{ marginBottom: "2.5rem" }}>
-          <ActionCard
-            icon="🔍"
-            title="Explore laws"
-            body="Search and filter the full library of AI regulations by jurisdiction, topic, and status."
-            href="/explore"
-            cta="Open explorer"
-          />
-          <ActionCard
-            icon="📋"
-            title="Run compliance assessment"
-            body="Answer 3 short sections and get a prioritized compliance checklist for your product."
-            href="/assess"
-            cta="Start assessment"
-            primary
-          />
-          <ActionCard
-            icon="⚖️"
-            title="Compare regulations"
-            body="Select up to 4 laws and compare them side-by-side across key dimensions."
-            href="/compare"
-            cta="Open comparison"
-          />
-        </div>
-
-        {/* Featured laws */}
-        <div className="section-heading">
-          <h2
-            style={{
-              margin: 0,
-              fontFamily: "var(--font-heading)",
-              color: "var(--navy)",
-              fontSize: "1.45rem",
-            }}
-          >
-            Featured regulations
-          </h2>
-          <Link href="/explore" style={{ fontSize: "0.9rem", color: "var(--blue)" }}>
-            View all →
-          </Link>
-        </div>
-        <div className="card-grid">
-          {recentLaws.map((law) => (
-            <div key={law.id} className="content-card">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <span className="micro">{law.jurisdiction}</span>
-                <span
-                  className="tag"
-                  style={{ fontSize: "0.75rem", textTransform: "capitalize" }}
-                >
-                  {law.status.replace(/_/g, " ")}
-                </span>
-              </div>
-              <h3 style={{ margin: "0.55rem 0 0.4rem", fontSize: "1.2rem" }}>
-                <Link href={`/laws/${law.slug}`} style={{ color: "var(--navy)" }}>
-                  {law.short_title}
-                </Link>
-              </h3>
-              <p style={{ color: "var(--muted)", fontSize: "0.92rem", margin: 0 }}>
-                {law.summary_short.slice(0, 120)}…
-              </p>
-              <Link
-                href={`/laws/${law.slug}`}
-                className="button"
-                style={{ marginTop: "1rem", fontSize: "0.88rem", padding: "0.5rem 0.9rem" }}
-              >
-                View law →
-              </Link>
-            </div>
-          ))}
-        </div>
-
-        {/* CTA banner */}
-        <div
-          className="cta-banner"
-          style={{
-            marginTop: "3rem",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: "1.25rem",
-            padding: "1.75rem 2rem",
-          }}
-        >
-          <div>
-            <p className="eyebrow">Compliance Wizard</p>
-            <h2 style={{ margin: "0.4rem 0 0.5rem", fontSize: "1.6rem" }}>
-              Get your compliance checklist
-            </h2>
-            <p>
-              Our rules engine analyzes 10+ AI laws against your product profile in under 60
-              seconds.
-            </p>
+          <div className="stat-card">
+            <strong style={{ color: "var(--navy)" }}>{TEMPLATE_LIBRARY.length}</strong>
+            <span>Starter templates</span>
           </div>
-          <Link href="/assess" className="button button--primary" style={{ whiteSpace: "nowrap" }}>
-            Start assessment →
-          </Link>
         </div>
+
+        <section style={{ marginBottom: "2.5rem" }}>
+          <div className="section-heading">
+            <h2 style={{ margin: 0, fontFamily: "var(--font-heading)", color: "var(--navy)", fontSize: "1.45rem" }}>
+              Built for high-intent SMB use cases
+            </h2>
+          </div>
+          <div className="card-grid">
+            {useCases.map((item) => (
+              <div key={item.title} className="content-card">
+                <h3 style={{ margin: "0 0 0.45rem", fontSize: "1.18rem", color: "var(--navy)" }}>{item.title}</h3>
+                <p style={{ color: "var(--muted)", fontSize: "0.94rem", margin: 0 }}>{item.body}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section style={{ marginBottom: "2.5rem" }}>
+          <div className="section-heading">
+            <h2 style={{ margin: 0, fontFamily: "var(--font-heading)", color: "var(--navy)", fontSize: "1.45rem" }}>
+              Why teams trust the output
+            </h2>
+            <Link href="/methodology" style={{ fontSize: "0.9rem", color: "var(--blue)" }}>
+              Read methodology →
+            </Link>
+          </div>
+          <div className="card-grid">
+            {trustPoints.map((point) => (
+              <div key={point} className="content-card" style={{ padding: "1.1rem 1.2rem" }}>
+                <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.95rem", fontWeight: 700 }}>{point}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section style={{ marginBottom: "2.5rem" }}>
+          <div className="section-heading">
+            <h2 style={{ margin: 0, fontFamily: "var(--font-heading)", color: "var(--navy)", fontSize: "1.45rem" }}>
+              Start with action, not research
+            </h2>
+          </div>
+          <div className="card-grid">
+            <ActionCard
+              title="Run the assessment"
+              body="Answer a short wizard and get prioritized AI law exposure in plain English."
+              href="/assess"
+              cta="Start assessment"
+              primary
+            />
+            <ActionCard
+              title="Download templates"
+              body="Get AI usage policies, transparency notices, diligence checklists, and launch-readiness docs."
+              href="/templates"
+              cta="Open templates"
+            />
+            <ActionCard
+              title="Inspect methodology"
+              body="See how LexForge scores laws, what the assessment does not guarantee, and how to review outputs responsibly."
+              href="/methodology"
+              cta="Review methodology"
+            />
+          </div>
+        </section>
       </div>
     </main>
   );
 }
 
+function SnapshotItem({ title, body }: { title: string; body: string }) {
+  return (
+    <div style={{ padding: "0.85rem 0.95rem", borderRadius: "14px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+      <p style={{ margin: "0 0 0.25rem", color: "var(--navy)", fontSize: "0.92rem", fontWeight: 700 }}>{title}</p>
+      <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.5 }}>{body}</p>
+    </div>
+  );
+}
+
 function ActionCard({
-  icon,
   title,
   body,
   href,
   cta,
   primary,
 }: {
-  icon: string;
   title: string;
   body: string;
   href: string;
@@ -182,8 +197,7 @@ function ActionCard({
 }) {
   return (
     <div className="content-card">
-      <span style={{ fontSize: "1.75rem" }}>{icon}</span>
-      <h3 style={{ margin: "0.65rem 0 0.4rem", fontSize: "1.25rem" }}>{title}</h3>
+      <h3 style={{ margin: "0 0 0.4rem", fontSize: "1.25rem", color: "var(--navy)" }}>{title}</h3>
       <p style={{ color: "var(--muted)", fontSize: "0.93rem", margin: 0 }}>{body}</p>
       <Link
         href={href}
@@ -195,4 +209,3 @@ function ActionCard({
     </div>
   );
 }
-

@@ -1,0 +1,2066 @@
+﻿[
+  {
+    "style": "",
+    "text": "Chapter 1.1"
+  },
+  {
+    "style": "",
+    "text": "What is AI Observability and Why It Matters"
+  },
+  {
+    "style": "",
+    "text": "The history of software engineering is, in many respects, a progression toward visibility. Early systems operated as opaque machines: when something failed, engineers inferred causes indirectly, often through intuition and experience. Over time, this opacity was reduced through successive layers of instrumentation\u2014first logging, then monitoring, and eventually full observability systems. Each step brought greater clarity, enabling engineers not only to detect failures, but to understand them."
+  },
+  {
+    "style": "",
+    "text": "The emergence of AI systems, particularly those built on large language models (LLMs), disrupts this trajectory. These systems do not conform to the assumptions that made traditional observability effective. Their behaviour is probabilistic rather than deterministic, their outputs are difficult to validate automatically, and their failures often manifest without explicit signals. As a result, the tools that once provided clarity now leave critical gaps."
+  },
+  {
+    "style": "",
+    "text": "AI observability arises as a response to this shift. It is not simply an extension of existing practices, but a redefinition of what it means to observe a system."
+  },
+  {
+    "style": "",
+    "text": "From Recording to Reasoning"
+  },
+  {
+    "style": "",
+    "text": "The evolution from logging to monitoring to observability reflects a deeper change in how engineers think about systems."
+  },
+  {
+    "style": "",
+    "text": "Logging represents the most basic form of visibility: a system records what it has done. These records are typically unstructured, written in natural language or loosely formatted text. They are invaluable during debugging, but only when the engineer already knows where to look. Logging, in this sense, is reactive. It captures events, but does not organise them into understanding."
+  },
+  {
+    "style": "",
+    "text": "Monitoring introduced aggregation and intent. Instead of inspecting raw logs, engineers defined metrics\u2014latency, throughput, error rates\u2014and tracked them over time. Systems could now raise alerts when predefined thresholds were exceeded. This made systems operationally manageable, but it also imposed a constraint: monitoring only answers the questions that were anticipated in advance. It is effective for known failure modes, but inherently blind to novel ones."
+  },
+  {
+    "style": "",
+    "text": "Observability extended this model by embracing uncertainty. Rather than relying solely on predefined metrics, observable systems emit rich, structured data\u2014traces, spans, and contextual metadata\u2014that allow engineers to ask new questions at runtime. This shift enabled debugging in complex, distributed architectures where behaviour could not be fully predicted during design."
+  },
+  {
+    "style": "",
+    "text": "However, all three paradigms share an implicit assumption: that system behaviour is fundamentally deterministic. Given the same inputs, a system is expected to produce the same outputs. Failures are discrete and identifiable. These assumptions break down in AI systems."
+  },
+  {
+    "style": "",
+    "text": "Where Traditional Observability Fails"
+  },
+  {
+    "style": "",
+    "text": "Large language models introduce a category of behaviour that traditional observability was never designed to capture."
+  },
+  {
+    "style": "",
+    "text": "An LLM can produce an output that appears entirely correct\u2014well-formed, coherent, and contextually appropriate\u2014while being factually wrong. This failure mode, often described as hallucination, does not register as an error in conventional systems. From the perspective of a monitoring dashboard, the request completed successfully. There is no exception, no spike in latency, no obvious anomaly. Yet the system has failed in a way that directly impacts users."
+  },
+  {
+    "style": "",
+    "text": "A similar invisibility applies to cost. In traditional systems, cost is closely tied to infrastructure utilisation. In LLM-based systems, cost is driven by token usage, prompt design, and model selection. These factors exist at the application layer, not the infrastructure layer, and therefore escape conventional monitoring. A small change in prompt structure can significantly increase cost without affecting any standard performance metric."
+  },
+  {
+    "style": "",
+    "text": "Privacy introduces a further dimension of complexity. AI systems routinely process unstructured text, which may contain sensitive or regulated information. Unlike structured data pipelines, where fields can be validated explicitly, LLM inputs and outputs are unconstrained. Sensitive information may appear anywhere within the text, in unpredictable forms. Traditional observability tools, which treat payloads as opaque, provide no mechanism for detecting or controlling this."
+  },
+  {
+    "style": "",
+    "text": "Underlying all of this is non-determinism. The same input to an LLM may produce different outputs depending on context, parameters, or model updates. This makes reproduction of issues inherently difficult. Without capturing the full execution context\u2014inputs, parameters, intermediate steps\u2014debugging becomes speculative rather than systematic."
+  },
+  {
+    "style": "",
+    "text": "These limitations are not edge cases; they are fundamental characteristics of AI systems. They require a different approach."
+  },
+  {
+    "style": "",
+    "text": "Toward AI Observability"
+  },
+  {
+    "style": "",
+    "text": "AI observability reframes the problem. Instead of asking how to instrument systems built on deterministic logic, it asks how to make probabilistic systems understandable."
+  },
+  {
+    "style": "",
+    "text": "At its core, AI observability is about legibility. It seeks to capture not just what a system did, but how and why it arrived at its output, and whether that output can be trusted. This requires moving beyond surface-level signals such as latency or error rates, and toward a richer representation of system behaviour."
+  },
+  {
+    "style": "",
+    "text": "In practical terms, this means treating every interaction with an AI model as a structured event. Inputs, outputs, intermediate transformations, and contextual metadata must all be captured in a form that can be analysed and reconstructed. Observability becomes inseparable from correctness, cost, and compliance."
+  },
+  {
+    "style": "",
+    "text": "This shift transforms observability from an operational concern into a foundational layer of the system."
+  },
+  {
+    "style": "",
+    "text": "The SpanForge Approach"
+  },
+  {
+    "style": "",
+    "text": "SpanForge embodies this perspective through a set of deliberate design choices."
+  },
+  {
+    "style": "",
+    "text": "Rather than adapting existing logging or tracing systems, it defines a unified event model that represents all system activity. Every operation\u2014whether a model invocation, a cost calculation, or a compliance check\u2014is expressed as an event within this model. This creates a consistent and composable representation of behaviour across the entire system."
+  },
+  {
+    "style": "",
+    "text": "This unification has a practical consequence: it allows different concerns to be analysed together. Performance, cost, and compliance are no longer separate domains with separate tools. They become different views over the same underlying data."
+  },
+  {
+    "style": "",
+    "text": "SpanForge also treats compliance as an inherent property of observability. Sensitive data is not simply logged; it is detected, classified, and managed as part of the event pipeline. Consent boundaries and regulatory requirements are enforced at the same level as tracing and instrumentation. This reflects a recognition that, in AI systems, governance cannot be layered on after the fact."
+  },
+  {
+    "style": "",
+    "text": "A defining characteristic of the system is its use of cryptographic guarantees. Events are linked into a tamper-evident chain, ensuring that the record of system behaviour cannot be altered without detection. This elevates observability data from a debugging aid to a verifiable source of truth\u2014one that can support audits, compliance reporting, and even legal scrutiny."
+  },
+  {
+    "style": "",
+    "text": "Finally, SpanForge adopts an SDK-first architecture. Observability is embedded directly into application code, rather than delegated to external infrastructure. This ensures that instrumentation is precise, context-aware, and under the control of the developer. It also reduces the gap between system behaviour and its representation, which is critical in complex AI workflows."
+  },
+  {
+    "style": "",
+    "text": "Why It Matters"
+  },
+  {
+    "style": "",
+    "text": "AI systems are increasingly responsible for decisions that affect users, businesses, and institutions. In such contexts, opacity is not merely inconvenient\u2014it is a risk."
+  },
+  {
+    "style": "",
+    "text": "A system that cannot be understood cannot be trusted. A system that cannot be trusted cannot be safely deployed at scale."
+  },
+  {
+    "style": "",
+    "text": "AI observability addresses this by making system behaviour transparent, traceable, and verifiable. It enables engineers to debug complex interactions, organisations to manage cost and risk, and stakeholders to establish confidence in system outputs."
+  },
+  {
+    "style": "",
+    "text": "This is not an incremental improvement over existing practices. It is a necessary adaptation to a new class of systems."
+  },
+  {
+    "style": "",
+    "text": "Looking Ahead"
+  },
+  {
+    "style": "",
+    "text": "This chapter establishes the conceptual foundation for the SpanForge system. The principles introduced here\u2014structured events, traceability, compliance integration, and verifiability\u2014will recur throughout the rest of the book."
+  },
+  {
+    "style": "",
+    "text": "In the next chapter, these ideas become concrete. We examine the RFC-0001 event envelope, the fundamental data structure that encodes every operation within SpanForge. It is through this structure that the abstract notion of AI observability is realised in practice."
+  },
+  {
+    "style": "",
+    "text": "What begins here as a conceptual shift will, in the chapters that follow, become a precise and implementable discipline."
+  },
+  {
+    "style": "",
+    "text": "Chapter 1.2"
+  },
+  {
+    "style": "",
+    "text": "The RFC-0001 Event Envelope \u2014 Schema, Fields, and Versioning"
+  },
+  {
+    "style": "",
+    "text": "If Chapter 1 established\u00a0why\u00a0AI observability is necessary, this chapter defines\u00a0how it is made concrete. In\u00a0SpanForge, everything begins with a single abstraction: the\u00a0event. Every model call, every decision, every compliance action, and every cost calculation is ultimately represented as an event."
+  },
+  {
+    "style": "",
+    "text": "The question, then, is not simply how to record events, but how to define them in a way that is consistent, verifiable, and portable across systems. RFC-0001 answers this question by specifying a\u00a0standardised event envelope\u2014a structured, language-agnostic schema that any system can emit and any backend can consume."
+  },
+  {
+    "style": "",
+    "text": "A Standard, Not Just a Structure"
+  },
+  {
+    "style": "",
+    "text": "At first glance, the event envelope appears to be a JSON object. But to treat it merely as a data structure would miss its significance. RFC-0001 defines a\u00a0standard, not just a format\u2014a shared vocabulary for describing the behaviour of AI systems."
+  },
+  {
+    "style": "",
+    "text": "This distinction matters. In the absence of a standard, each system invents its own schema. One tool logs model calls one way,\u00a0another\u00a0tracks costs differently, and a third records compliance signals in yet another format. The result is fragmentation: data cannot be easily combined, analysed, or verified across systems."
+  },
+  {
+    "style": "",
+    "text": "The event envelope eliminates this fragmentation by providing a\u00a0minimal, extensible contract. It is minimal in that it defines only what is necessary for interoperability. It is extensible in that it allows systems to evolve without breaking that interoperability."
+  },
+  {
+    "style": "",
+    "text": "The Shape of an Event"
+  },
+  {
+    "style": "",
+    "text": "Every\u00a0SpanForge\u00a0event conforms to a clearly defined structure. At its core are a small number of required fields that establish identity, context, and meaning."
+  },
+  {
+    "style": "",
+    "text": "An event must always include a unique identifier, a schema version, a namespace, a timestamp, a service name, and a payload. Together, these fields answer the fundamental questions:\u00a0what happened, where, and when?"
+  },
+  {
+    "style": "",
+    "text": "The\u00a0event identifier\u00a0is globally unique, implemented as a UUID v4. This ensures that events can be generated independently across distributed systems without coordination, while still avoiding collisions."
+  },
+  {
+    "style": "",
+    "text": "The\u00a0schema version\u00a0encodes the version of the RFC that the event conforms to. This allows producers and consumers to reason explicitly about compatibility, rather than relying on implicit assumptions."
+  },
+  {
+    "style": "",
+    "text": "The\u00a0namespace\u00a0defines the semantic category of the event. It is not merely a label; it determines the structure of the payload and the meaning of the data contained within it."
+  },
+  {
+    "style": "",
+    "text": "The\u00a0timestamp\u00a0records when the event occurred, using a standardised ISO 8601 UTC format. This provides a consistent temporal reference across systems."
+  },
+  {
+    "style": "",
+    "text": "The\u00a0service name\u00a0identifies the component that emitted the event, anchoring it within a distributed architecture."
+  },
+  {
+    "style": "",
+    "text": "Finally, the\u00a0payload\u00a0carries the substantive data of the event. Its structure is not fixed\u00a0globally, but\u00a0defined by the namespace to which the event belongs."
+  },
+  {
+    "style": "",
+    "text": "Beyond these required fields, the envelope supports additional optional fields\u2014such as trace identifiers, span identifiers, signatures, redaction metadata, and arbitrary extensions\u2014that enrich the event without compromising its core structure."
+  },
+  {
+    "style": "",
+    "text": "Namespaces as Semantic Contracts"
+  },
+  {
+    "style": "",
+    "text": "One of the most important design decisions in RFC-0001 is the introduction of\u00a0namespaces\u00a0as the organising principle for events."
+  },
+  {
+    "style": "",
+    "text": "Rather than defining a single monolithic schema for all possible events,\u00a0SpanForge\u00a0partitions the event space into domains. Each namespace corresponds to a specific category of system behaviour: model calls, tool execution, guardrail checks, cost tracking, compliance actions, and more."
+  },
+  {
+    "style": "",
+    "text": "This approach has two advantages. First, it allows each type of event to define its own payload structure without overloading a single schema. Second, it provides semantic clarity. When an event declares its namespace\u2014for example,\u00a0llm.call\u00a0or\u00a0guardrail.block\u2014it immediately communicates its role within the system."
+  },
+  {
+    "style": "",
+    "text": "Namespaces also serve as an extensibility mechanism. Third-party systems can define their own namespaces, provided they use reverse-domain notation. This ensures that extensions remain globally unique while preserving compatibility with the core standard."
+  },
+  {
+    "style": "",
+    "text": "In this way, namespaces act as\u00a0contracts within the contract: they define not just how data is structured, but what that data means."
+  },
+  {
+    "style": "",
+    "text": "Canonical Form and Deterministic Representation"
+  },
+  {
+    "style": "",
+    "text": "A critical requirement of the event envelope is that it must be\u00a0deterministically serializable. This is not a cosmetic concern; it is essential for cryptographic verification."
+  },
+  {
+    "style": "",
+    "text": "RFC-0001 defines a canonical form for events: a JSON representation in which keys are sorted lexicographically, whitespace is eliminated, and encoding is standardised. The signature field, if present, is excluded from this representation when computing the signature."
+  },
+  {
+    "style": "",
+    "text": "This ensures that the same event, regardless of where it is processed, always produces the same byte representation. Without this guarantee, cryptographic operations would be unreliable, as even trivial differences in formatting could produce different results."
+  },
+  {
+    "style": "",
+    "text": "Deterministic serialization is therefore the bridge between structured data and cryptographic integrity."
+  },
+  {
+    "style": "",
+    "text": "HMAC Signing and Integrity Guarantees"
+  },
+  {
+    "style": "",
+    "text": "The event envelope is designed not only to describe system behaviour, but to\u00a0prove its integrity."
+  },
+  {
+    "style": "",
+    "text": "Each event may include a cryptographic signature computed using HMAC-SHA256 over its canonical form. This signature binds the contents of the event to a secret key, ensuring that any modification can be detected."
+  },
+  {
+    "style": "",
+    "text": "The significance of this becomes clear when events are considered not in isolation, but as part of a sequence. By verifying signatures and checking timestamp ordering, a system can establish that a chain of events has not been tampered with."
+  },
+  {
+    "style": "",
+    "text": "This transforms observability data into something stronger than logs. It becomes a\u00a0tamper-evident record, suitable for audit, compliance, and forensic analysis."
+  },
+  {
+    "style": "",
+    "text": "Optional Fields and Structured Context"
+  },
+  {
+    "style": "",
+    "text": "While the required fields define the core identity of an event, the optional fields provide the context needed for deeper analysis."
+  },
+  {
+    "style": "",
+    "text": "Trace and span identifiers allow events to be grouped into distributed execution flows. Parent-child relationships can be reconstructed, enabling a complete view of how a request propagated through the system."
+  },
+  {
+    "style": "",
+    "text": "Redaction metadata records which fields have been modified to remove sensitive information, preserving transparency while enforcing privacy constraints."
+  },
+  {
+    "style": "",
+    "text": "The meta field provides a controlled escape hatch for additional data. Unlike arbitrary logging, this extension point is explicitly defined, ensuring that flexibility does not compromise structure."
+  },
+  {
+    "style": "",
+    "text": "Together, these optional fields allow the event envelope to scale from simple instrumentation to full system introspection."
+  },
+  {
+    "style": "",
+    "text": "Versioning as a First-Class Mechanism"
+  },
+  {
+    "style": "",
+    "text": "No schema remains static. As systems evolve, so too must the structures that describe them. RFC-0001 addresses this through explicit\u00a0semantic versioning."
+  },
+  {
+    "style": "",
+    "text": "Every event declares its schema version, allowing consumers to determine how it should be interpreted. The versioning model follows established conventions: major versions introduce breaking changes, minor versions add new fields, and patch versions clarify existing behaviour."
+  },
+  {
+    "style": "",
+    "text": "This approach ensures that evolution is controlled and predictable. Systems can adopt new versions at their own pace, while maintaining compatibility with existing data."
+  },
+  {
+    "style": "",
+    "text": "Versioning is not treated as an afterthought; it is a fundamental part of the contract."
+  },
+  {
+    "style": "",
+    "text": "Why the Envelope Matters"
+  },
+  {
+    "style": "",
+    "text": "It is tempting to view the event envelope as an implementation detail\u2014a low-level concern that simply enables higher-level features.\u00a0In reality, it\u00a0is the opposite. The envelope is the foundation upon which everything else depends."
+  },
+  {
+    "style": "",
+    "text": "Tracing relies on consistent identifiers. Compliance relies on structured payloads. Security relies on deterministic serialization and cryptographic signatures. Without a well-defined envelope, these capabilities would be fragmented and unreliable."
+  },
+  {
+    "style": "",
+    "text": "By defining a minimal, extensible, and verifiable schema, RFC-0001 establishes a common language for AI observability. It ensures that events are not only recorded, but understood\u2014and, when necessary, trusted."
+  },
+  {
+    "style": "",
+    "text": "Looking Ahead"
+  },
+  {
+    "style": "",
+    "text": "With the structure of events established, the next question is how they are ordered and correlated across distributed systems. While UUIDs provide uniqueness, they do not convey temporal ordering or locality."
+  },
+  {
+    "style": "",
+    "text": "In the next chapter, we examine ULIDs\u2014identifiers that preserve ordering while remaining globally unique\u2014and explore how they complement the event model in large-scale systems."
+  },
+  {
+    "style": "",
+    "text": "The event envelope defines\u00a0what\u00a0is recorded. The identifier defines\u00a0how those records relate in time. Together, they form the basis of a coherent observability system."
+  },
+  {
+    "style": "",
+    "text": "Chapter 1.3"
+  },
+  {
+    "style": "",
+    "text": "ULID \u2014 Lexicographically Sortable IDs Without Coordination"
+  },
+  {
+    "style": "",
+    "text": "Identifiers are often treated as an implementation detail. In distributed observability systems, they are not. The choice of identifier determines whether events can be reliably ordered, correlated, and reasoned about. It influences storage performance, debugging workflows, and ultimately the system\u2019s ability to reconstruct causality."
+  },
+  {
+    "style": "",
+    "text": "RFC-0001 defines the event envelope and specifies a UUIDv4 for\u00a0event_id, prioritising universality and compatibility across systems.\u00a0SpanForge\u00a0builds on this\u00a0foundation, but\u00a0makes a deliberate refinement: for internal event pipelines and high-fidelity observability workflows, it adopts\u00a0ULIDs (Universally Unique Lexicographically Sortable Identifiers)\u00a0as the preferred identifier primitive."
+  },
+  {
+    "style": "",
+    "text": "This is not a cosmetic change. It is a structural decision that aligns the identifier itself with the temporal nature of observability data."
+  },
+  {
+    "style": "",
+    "text": "The Limitation of Random Identifiers"
+  },
+  {
+    "style": "",
+    "text": "UUIDv4 solves one problem extremely well: uniqueness without coordination. Any node in a distributed system can generate identifiers independently, with negligible risk of collision."
+  },
+  {
+    "style": "",
+    "text": "What it does not provide is\u00a0order."
+  },
+  {
+    "style": "",
+    "text": "Because UUIDv4 is entirely random, it carries no temporal meaning. Two events generated milliseconds apart are indistinguishable when sorted by their identifiers. As a result, systems must rely on timestamps to reconstruct sequence."
+  },
+  {
+    "style": "",
+    "text": "This introduces friction. Timestamps can drift across machines, vary in precision, and collide under high throughput. In practice, engineers end up combining identifiers and timestamps to infer ordering\u2014a sign that neither is sufficient on its own."
+  },
+  {
+    "style": "",
+    "text": "In observability systems, where understanding\u00a0what happened first\u00a0is fundamental, this limitation becomes acute."
+  },
+  {
+    "style": "",
+    "text": "Ordering as a First-Class Requirement"
+  },
+  {
+    "style": "",
+    "text": "Observability is not just about recording events; it is about reconstructing behaviour over time. Every trace, every debugging session, and every audit depends on the ability to answer questions of sequence and causality."
+  },
+  {
+    "style": "",
+    "text": "Which event initiated this chain?"
+  },
+  {
+    "style": "",
+    "text": "What happened immediately before the failure?"
+  },
+  {
+    "style": "",
+    "text": "How did execution progress across services?"
+  },
+  {
+    "style": "",
+    "text": "When ordering is external to the identifier, these questions require additional logic, additional indexing, and often additional assumptions. When ordering is embedded in the identifier itself, the system becomes simpler and more reliable."
+  },
+  {
+    "style": "",
+    "text": "This is the principle behind ULIDs."
+  },
+  {
+    "style": "",
+    "text": "The Structure of a ULID"
+  },
+  {
+    "style": "",
+    "text": "A ULID is a 128-bit identifier composed of two parts: a timestamp and a randomness component. The timestamp encodes the number of milliseconds since the Unix epoch, while the remaining bits ensure uniqueness within that time window."
+  },
+  {
+    "style": "",
+    "text": "These bits are encoded using Crockford\u2019s Base32 into a fixed-length, 26-character string. Crucially, this encoding preserves\u00a0lexicographic order. When ULIDs are sorted as strings, they are sorted by time."
+  },
+  {
+    "style": "",
+    "text": "This property allows a ULID to function simultaneously as:"
+  },
+  {
+    "style": "",
+    "text": "A globally unique identifier"
+  },
+  {
+    "style": "",
+    "text": "A timestamp proxy"
+  },
+  {
+    "style": "",
+    "text": "An ordering key"
+  },
+  {
+    "style": "",
+    "text": "The identifier is no longer just a label; it becomes a compact representation of when the event occurred."
+  },
+  {
+    "style": "",
+    "text": "Lexicographic Ordering in Practice"
+  },
+  {
+    "style": "",
+    "text": "The practical impact of lexicographic ordering is immediate."
+  },
+  {
+    "style": "",
+    "text": "Events written to storage can be appended in order without additional indexing. Retrieving the most recent events becomes a simple matter of reading the highest identifiers. Debugging workflows become more intuitive, as identifiers themselves reflect the progression of execution."
+  },
+  {
+    "style": "",
+    "text": "This also improves storage locality. Unlike random identifiers, which scatter writes across storage structures, ULIDs tend to cluster sequentially. This leads to better performance in databases and log stores, particularly under high write throughput."
+  },
+  {
+    "style": "",
+    "text": "More importantly, it reduces cognitive overhead. Engineers no longer need to cross-reference timestamps to understand sequence. The identifier itself provides that information."
+  },
+  {
+    "style": "",
+    "text": "Human-Centric Encoding"
+  },
+  {
+    "style": "",
+    "text": "ULIDs use Crockford\u2019s Base32 alphabet, which is designed for readability and robustness. Ambiguous characters such as I, L, and O are excluded, reducing the likelihood of transcription errors. The encoding is case-insensitive and can be decoded efficiently using constant-time lookup tables."
+  },
+  {
+    "style": "",
+    "text": "These details are not incidental. In observability systems, identifiers frequently appear in logs, dashboards, and debugging tools. Making them easier to read and handle improves the overall developer experience."
+  },
+  {
+    "style": "",
+    "text": "Monotonicity Under Concurrency"
+  },
+  {
+    "style": "",
+    "text": "One challenge arises when multiple identifiers are generated within the same millisecond. In high-throughput systems, this is common rather than exceptional."
+  },
+  {
+    "style": "",
+    "text": "ULID implementations address this through\u00a0monotonic generation. When multiple identifiers share the same timestamp, the randomness component is incremented in a controlled manner, ensuring that each subsequent ULID is strictly greater than the previous one."
+  },
+  {
+    "style": "",
+    "text": "Achieving this requires coordination within the local process. In Python, for example, this may involve a\u00a0threading.Lock\u00a0to ensure that concurrent threads do not produce out-of-order identifiers."
+  },
+  {
+    "style": "",
+    "text": "This coordination is deliberately limited in scope. There is no global dependency, no central authority, and no cross-node synchronisation. The system remains fully distributed while preserving local ordering guarantees."
+  },
+  {
+    "style": "",
+    "text": "ULIDs Within the\u00a0SpanForge\u00a0Model"
+  },
+  {
+    "style": "",
+    "text": "SpanForge\u2019s\u00a0adoption of ULIDs reflects a broader design principle: wherever possible, encode meaning directly into primitives rather than relying on external interpretation."
+  },
+  {
+    "style": "",
+    "text": "The RFC defines a UUIDv4-based schema to ensure interoperability across languages and systems. Within\u00a0SpanForge\u2019s\u00a0implementation, ULIDs are used to enhance that model by providing intrinsic ordering. This allows event streams to be processed, stored, and analysed with fewer assumptions and less auxiliary data."
+  },
+  {
+    "style": "",
+    "text": "ULIDs complement the event envelope rather than replacing it. The envelope defines\u00a0what\u00a0an event is; the ULID refines\u00a0how events relate in time. Together, they produce a system in which identity and sequence are tightly coupled."
+  },
+  {
+    "style": "",
+    "text": "Tradeoffs\u00a0and Design Rationale"
+  },
+  {
+    "style": "",
+    "text": "ULIDs are not without\u00a0tradeoffs. Their timestamp precision is limited to milliseconds, which may not capture extremely fine-grained ordering in high-frequency systems. Monotonic generation introduces minor complexity within a process."
+  },
+  {
+    "style": "",
+    "text": "However, these costs are modest compared to the benefits. In most observability contexts, millisecond precision is sufficient, and the added implementation complexity is localised and manageable."
+  },
+  {
+    "style": "",
+    "text": "More importantly, ULIDs eliminate a class of problems associated with unordered identifiers. They reduce reliance on external timestamps, simplify storage patterns, and make event streams easier to reason about."
+  },
+  {
+    "style": "",
+    "text": "This is why\u00a0SpanForge\u00a0adopts them\u2014not as an optimisation, but as a structural improvement."
+  },
+  {
+    "style": "",
+    "text": "A Deliberate Evolution"
+  },
+  {
+    "style": "",
+    "text": "It is important to recognise that this choice represents an evolution beyond the base RFC. RFC-0001 prioritises standardisation and compatibility, which makes UUIDv4 a sensible default.\u00a0SpanForge, as a reference implementation and system design, extends this foundation to better serve the needs of AI observability."
+  },
+  {
+    "style": "",
+    "text": "This distinction is intentional. Standards define the minimum required for interoperability; systems refine those standards to achieve stronger guarantees."
+  },
+  {
+    "style": "",
+    "text": "ULIDs are one such refinement."
+  },
+  {
+    "style": "",
+    "text": "Looking Ahead"
+  },
+  {
+    "style": "",
+    "text": "With a consistent event envelope and identifiers that preserve temporal order, the next step is to define how events are categorised and interpreted across the system."
+  },
+  {
+    "style": "",
+    "text": "In the following chapter, we examine the\u00a0event type registry\u2014the mechanism that defines canonical event types and ensures semantic consistency across namespaces."
+  },
+  {
+    "style": "",
+    "text": "If the event envelope defines structure, and ULIDs define sequence, the event type registry defines meaning."
+  },
+  {
+    "style": "",
+    "text": "Chapter 1.4"
+  },
+  {
+    "style": "",
+    "text": "The Event Type Registry \u2014 Canonical Types Across Namespaces"
+  },
+  {
+    "style": "",
+    "text": "If the event envelope defines the structure of observability data, and identifiers define how events are ordered, the next problem is more fundamental:\u00a0how do we ensure that events mean the same thing everywhere?"
+  },
+  {
+    "style": "",
+    "text": "Structure alone is insufficient. Two events can share a schema and still be semantically incompatible. Without a shared vocabulary, observability data becomes difficult to interpret, and consistency breaks down across services, teams, and tools."
+  },
+  {
+    "style": "",
+    "text": "The\u00a0event type registry\u00a0exists to solve this problem. It defines a canonical set of event types\u2014organised into namespaces\u2014that give semantic meaning to every event emitted by the system."
+  },
+  {
+    "style": "",
+    "text": "From Structure to Meaning"
+  },
+  {
+    "style": "",
+    "text": "In RFC-0001, the namespace field is the key that connects structure to meaning. It identifies the category of the event and determines how its payload should be interpreted."
+  },
+  {
+    "style": "",
+    "text": "However, allowing arbitrary namespaces without coordination would recreate the very fragmentation the system is designed to avoid. Different teams might describe the same concept in different\u00a0ways, or\u00a0reuse the same name with different meanings. Over time, this leads to ambiguity and inconsistency."
+  },
+  {
+    "style": "",
+    "text": "The event type registry addresses this by defining a\u00a0canonical catalogue of event types, each with a well-defined purpose and expected payload structure. It transforms the namespace field from a free-form label into a controlled vocabulary."
+  },
+  {
+    "style": "",
+    "text": "Namespaces as Domains of Behaviour"
+  },
+  {
+    "style": "",
+    "text": "The registry organises event types into namespaces that reflect distinct domains within an AI system. These domains correspond to the major categories of behaviour that\u00a0SpanForge\u00a0observes."
+  },
+  {
+    "style": "",
+    "text": "At the core are namespaces related to model interaction, capturing LLM calls, streaming outputs, and token-level activity. These represent the fundamental operations of AI systems."
+  },
+  {
+    "style": "",
+    "text": "Surrounding this core are namespaces for agent behaviour\u2014decision-making steps, tool execution, and memory access. These reflect multi-step, tool-augmented workflows that define modern AI applications."
+  },
+  {
+    "style": "",
+    "text": "Another layer captures guardrails and safety mechanisms, where events record evaluations, policy checks, and blocked actions. These enforce constraints on model behaviour."
+  },
+  {
+    "style": "",
+    "text": "Cost tracking forms its own domain, with events that record token usage and budget thresholds. Unlike traditional systems, cost is not external\u2014it is part of runtime behaviour."
+  },
+  {
+    "style": "",
+    "text": "Finally, compliance and governance namespaces capture consent, audit access, model lifecycle changes, and human-in-the-loop workflows. These extend observability into regulatory and organisational domains."
+  },
+  {
+    "style": "",
+    "text": "Each namespace is therefore not just a grouping mechanism, but a representation of a specific aspect of system behaviour."
+  },
+  {
+    "style": "",
+    "text": "Why Canonical Types Matter"
+  },
+  {
+    "style": "",
+    "text": "Canonical event types enable consistency across the system."
+  },
+  {
+    "style": "",
+    "text": "When a system emits an event of type\u00a0llm.call, every consumer\u2014whether a tracing system, cost analyser, or compliance auditor\u2014interprets it the same way. The meaning is not inferred; it is defined."
+  },
+  {
+    "style": "",
+    "text": "This consistency enables interoperability. Different tools can operate on the same event stream without translation layers. Queries can span multiple services without ambiguity. Metrics derived from events remain comparable across environments."
+  },
+  {
+    "style": "",
+    "text": "It also reduces cognitive load during debugging. Engineers do not need to reconstruct meaning from raw data. The event type provides immediate context."
+  },
+  {
+    "style": "",
+    "text": "In systems designed for auditability and compliance, this is not optional. It is foundational."
+  },
+  {
+    "style": "",
+    "text": "EventType\u00a0as a String, Not an Enum"
+  },
+  {
+    "style": "",
+    "text": "A natural question arises: why not represent event types as a strict enumeration?"
+  },
+  {
+    "style": "",
+    "text": "Enums provide safety. They restrict values, enforce validation, and make the set of possible types explicit. However, they also impose rigidity."
+  },
+  {
+    "style": "",
+    "text": "In distributed systems, closed\u00a0enums\u00a0optimise for safety at the cost of evolution.\u00a0SpanForge\u00a0makes the opposite\u00a0tradeoff."
+  },
+  {
+    "style": "",
+    "text": "Event types are represented as strings\u2014specifically, as a subclass of str rather than a closed\u00a0enum. This allows new types to be introduced without requiring changes to a\u00a0central definition. It also avoids versioning issues where consumers fail to recognise newly added\u00a0enum\u00a0values."
+  },
+  {
+    "style": "",
+    "text": "This design enables extension without coordination. The registry defines canonical\u00a0types, but\u00a0does not prevent the introduction of new ones."
+  },
+  {
+    "style": "",
+    "text": "The result is a system that is both structured and adaptable."
+  },
+  {
+    "style": "",
+    "text": "Third-Party Extensions and\u00a0Namespacing"
+  },
+  {
+    "style": "",
+    "text": "No registry can anticipate every use case. Systems built on top of\u00a0SpanForge\u00a0will inevitably need to define their own event types."
+  },
+  {
+    "style": "",
+    "text": "To support this without compromising consistency, the registry enforces a\u00a0reverse-domain namespace convention\u00a0for third-party extensions. For example, a custom event might be named\u00a0com.example.my_event."
+  },
+  {
+    "style": "",
+    "text": "This ensures global uniqueness while preserving clarity. It also makes the origin of an event immediately visible, which is valuable for debugging and governance."
+  },
+  {
+    "style": "",
+    "text": "This creates a layered model: a stable core of canonical event types, surrounded by an extensible space for domain-specific needs."
+  },
+  {
+    "style": "",
+    "text": "Registry as a Contract"
+  },
+  {
+    "style": "",
+    "text": "The event type registry is not merely documentation; it is a\u00a0contract\u00a0between producers and consumers."
+  },
+  {
+    "style": "",
+    "text": "If a producer emits\u00a0llm.call, the consumer must not guess what it means\u2014the registry defines it."
+  },
+  {
+    "style": "",
+    "text": "Producers are expected to emit events that conform to registry definitions. Consumers rely on those definitions to interpret events correctly. This shared understanding is what enables the system to function as a coherent whole."
+  },
+  {
+    "style": "",
+    "text": "The system does not strictly forbid arbitrary event types, but it strongly encourages adherence to the registry. This reflects a practical balance: enough structure to ensure interoperability, enough flexibility to support growth."
+  },
+  {
+    "style": "",
+    "text": "The Registry in Practice"
+  },
+  {
+    "style": "",
+    "text": "In real systems, the registry manifests as recurring patterns within event streams."
+  },
+  {
+    "style": "",
+    "text": "An LLM invocation produces a\u00a0llm.call\u00a0event. A tool execution produces a\u00a0tool.call, followed by a\u00a0tool.result. A guardrail evaluation produces a\u00a0guardrail.check, and a blocked action produces a\u00a0guardrail.block. Cost tracking emits\u00a0cost.usage\u00a0events, while compliance workflows generate events related to consent and audit access."
+  },
+  {
+    "style": "",
+    "text": "These patterns create a consistent narrative. A trace is not just a sequence of events\u2014it is a sequence of recognisable steps, each with defined meaning."
+  },
+  {
+    "style": "",
+    "text": "This consistency allows higher-level abstractions\u2014metrics, alerts, compliance reports\u2014to be built reliably on top of the event stream."
+  },
+  {
+    "style": "",
+    "text": "Why This Matters"
+  },
+  {
+    "style": "",
+    "text": "Without a registry, observability data fragments. Different services describe the same concepts differently, making correlation difficult and analysis unreliable."
+  },
+  {
+    "style": "",
+    "text": "With a registry, the system gains a shared language. Events become structured statements with defined meaning, enabling interoperability and reducing ambiguity."
+  },
+  {
+    "style": "",
+    "text": "Without this semantic clarity, the system collapses into inconsistent logs."
+  },
+  {
+    "style": "",
+    "text": "Looking Ahead"
+  },
+  {
+    "style": "",
+    "text": "With the event envelope defining structure, identifiers defining order, and the registry defining meaning, the foundation of the event model is complete."
+  },
+  {
+    "style": "",
+    "text": "The next chapter examines how events are organised into\u00a0traces and spans, and how context is propagated across asynchronous and distributed boundaries."
+  },
+  {
+    "style": "",
+    "text": "If this chapter defines what events mean, the next explores how those events form a coherent execution graph."
+  },
+  {
+    "style": "",
+    "text": "Chapter 1.5"
+  },
+  {
+    "style": "",
+    "text": "Traces, Spans, and the Context Propagation Model"
+  },
+  {
+    "style": "",
+    "text": "With the event envelope defining structure, identifiers defining order, and the registry defining meaning, the next problem is to understand how individual events\u00a0compose into execution."
+  },
+  {
+    "style": "",
+    "text": "An isolated event is\u00a0useful, but\u00a0limited. It tells us that something happened. It does not tell us how that action relates to others, what caused it, or what followed from it. Observability, in its full sense, requires more than individual records\u2014it requires a way to reconstruct the\u00a0flow\u00a0of execution across time, services, and asynchronous boundaries."
+  },
+  {
+    "style": "",
+    "text": "This is the role of\u00a0traces and spans."
+  },
+  {
+    "style": "",
+    "text": "From Events to Execution"
+  },
+  {
+    "style": "",
+    "text": "In a non-trivial system, a single user request rarely maps to a single operation. It may trigger multiple model calls, invoke tools, read from memory, pass through guardrails, and emit compliance signals. These operations may occur across different services, threads, or even machines."
+  },
+  {
+    "style": "",
+    "text": "To make sense of this complexity, events must be organised into a structure that reflects their relationships. A trace provides that structure."
+  },
+  {
+    "style": "",
+    "text": "A\u00a0trace\u00a0represents the complete lifecycle of a single logical operation\u2014typically corresponding to a user request or a workflow execution. It is composed of smaller units called\u00a0spans, each representing an individual step within that lifecycle."
+  },
+  {
+    "style": "",
+    "text": "If events are the atoms of observability, spans are derived structures, and traces are the full system narrative."
+  },
+  {
+    "style": "",
+    "text": "The Structure of a Trace"
+  },
+  {
+    "style": "",
+    "text": "A trace is not a flat list. It is a\u00a0hierarchical structure."
+  },
+  {
+    "style": "",
+    "text": "At its root is a span representing the entry point of the operation\u2014such as an API request or a top-level agent invocation. From this root, child spans represent nested operations: model calls, tool executions, internal computations."
+  },
+  {
+    "style": "",
+    "text": "Each span captures:"
+  },
+  {
+    "style": "",
+    "text": "A unit of work"
+  },
+  {
+    "style": "",
+    "text": "Its start and end time"
+  },
+  {
+    "style": "",
+    "text": "Its relationship to other spans"
+  },
+  {
+    "style": "",
+    "text": "The relationships between spans form a tree. Parent spans represent higher-level operations; child spans represent the steps they invoke. This hierarchy reflects causality: a child span exists because its parent initiated it."
+  },
+  {
+    "style": "",
+    "text": "In practice, this structure allows engineers to move from a high-level view of a request down to the fine-grained details of its execution."
+  },
+  {
+    "style": "",
+    "text": "Spans as Derived Units of Work"
+  },
+  {
+    "style": "",
+    "text": "A\u00a0span\u00a0is the fundamental unit of execution within a trace. It represents a bounded operation with a clear beginning and end."
+  },
+  {
+    "style": "",
+    "text": "In\u00a0SpanForge, spans are not a separate primitive\u2014they are\u00a0derived views over events. Each span corresponds to a sequence of events that share a common\u00a0span_id. These events may include start markers, intermediate annotations, and completion records."
+  },
+  {
+    "style": "",
+    "text": "For example, a single\u00a0llm.call\u00a0may produce a span composed of a start event, token usage updates, and a completion event\u2014all linked by the same\u00a0span_id."
+  },
+  {
+    "style": "",
+    "text": "This design reinforces the centrality of the event model. Rather than introducing a parallel abstraction, spans emerge from the same underlying data."
+  },
+  {
+    "style": "",
+    "text": "A span is therefore not just a timing measurement. It is a structured record of what happened during a specific operation."
+  },
+  {
+    "style": "",
+    "text": "Context Propagation: The Core Challenge"
+  },
+  {
+    "style": "",
+    "text": "Defining traces and spans is only part of the problem. The harder challenge is maintaining these relationships across boundaries."
+  },
+  {
+    "style": "",
+    "text": "Modern AI systems are inherently asynchronous and distributed. A single workflow may await external APIs, dispatch background tasks, call other services, and resume execution at later points."
+  },
+  {
+    "style": "",
+    "text": "At each boundary, execution context risks being lost. Without explicit propagation,\u00a0traces fragment at service boundaries."
+  },
+  {
+    "style": "",
+    "text": "This is the problem of\u00a0context propagation."
+  },
+  {
+    "style": "",
+    "text": "Why\u00a0contextvars\u00a0Matters"
+  },
+  {
+    "style": "",
+    "text": "In synchronous systems, context can often be stored in thread-local storage. Each thread carries its own context, and operations within that thread can access it implicitly."
+  },
+  {
+    "style": "",
+    "text": "This model breaks down in asynchronous environments. With\u00a0asyncio, multiple coroutines share the same thread, and execution may pause and resume at arbitrary points. Thread-local storage cannot distinguish between concurrent coroutines."
+  },
+  {
+    "style": "",
+    "text": "SpanForge\u00a0addresses this using Python\u2019s\u00a0contextvars."
+  },
+  {
+    "style": "",
+    "text": "contextvars\u00a0associates\u00a0context with the current execution flow rather than the thread. When a coroutine is suspended and resumed, its context is preserved automatically. When new coroutines are created, context can be explicitly propagated."
+  },
+  {
+    "style": "",
+    "text": "This enables trace continuity across await boundaries without manual plumbing."
+  },
+  {
+    "style": "",
+    "text": "The choice of\u00a0contextvars\u00a0is not an implementation detail\u2014it is required for correctness in asynchronous systems."
+  },
+  {
+    "style": "",
+    "text": "Crossing Service Boundaries"
+  },
+  {
+    "style": "",
+    "text": "Context propagation becomes more complex when execution crosses service boundaries."
+  },
+  {
+    "style": "",
+    "text": "When one service calls another\u2014over HTTP, messaging systems, or RPC\u2014the in-memory context is lost. To preserve trace continuity, context must be encoded and transmitted explicitly."
+  },
+  {
+    "style": "",
+    "text": "SpanForge\u00a0aligns with the W3C\u00a0TraceContext\u00a0standard for this purpose. Trace identifiers and span identifiers are propagated through headers such as\u00a0traceparent, allowing downstream services to continue the trace."
+  },
+  {
+    "style": "",
+    "text": "Additional metadata can be propagated using mechanisms such as baggage, which carries key-value context alongside the trace."
+  },
+  {
+    "style": "",
+    "text": "Without explicit propagation, traces fragment at service boundaries. With it, a single trace can span an entire distributed system."
+  },
+  {
+    "style": "",
+    "text": "Preserving Parent-Child Relationships"
+  },
+  {
+    "style": "",
+    "text": "A critical requirement of context propagation is maintaining\u00a0causal relationships\u00a0between spans."
+  },
+  {
+    "style": "",
+    "text": "When a service receives a request with an existing trace context, it does not start a new trace. Instead, it creates a new span as a child of the incoming span. This preserves continuity and ensures that causality is maintained."
+  },
+  {
+    "style": "",
+    "text": "Even in asynchronous workflows\u2014where execution pauses, resumes, or branches\u2014these relationships must remain intact. A span that begins in one context and ends in another must still be identifiable as a single unit of work."
+  },
+  {
+    "style": "",
+    "text": "This consistency is what allows traces to represent real execution rather than a collection of unrelated events."
+  },
+  {
+    "style": "",
+    "text": "Traces as Execution Graphs"
+  },
+  {
+    "style": "",
+    "text": "Traces are often described as trees. In real systems, they behave more like\u00a0graphs."
+  },
+  {
+    "style": "",
+    "text": "Asynchronous execution introduces overlap, concurrency, and interleaving operations. What matters is not strict structure, but\u00a0causality\u2014the relationships that explain why one operation follows another."
+  },
+  {
+    "style": "",
+    "text": "By preserving parent-child links and propagation context, traces form an execution graph that reflects how work\u00a0actually flowed\u00a0through the system."
+  },
+  {
+    "style": "",
+    "text": "These graphs enable powerful analysis:"
+  },
+  {
+    "style": "",
+    "text": "Identifying latency bottlenecks"
+  },
+  {
+    "style": "",
+    "text": "Tracing the origin of failures"
+  },
+  {
+    "style": "",
+    "text": "Understanding how data moves through a workflow"
+  },
+  {
+    "style": "",
+    "text": "Without this structure, observability reduces to disconnected records. With it, the system becomes intelligible."
+  },
+  {
+    "style": "",
+    "text": "Why This Matters"
+  },
+  {
+    "style": "",
+    "text": "AI systems are inherently complex. A single operation may involve multiple layers of abstraction, external dependencies, and asynchronous steps."
+  },
+  {
+    "style": "",
+    "text": "Without a mechanism to connect these steps, observability data becomes fragmented. Events exist, but their relationships are unclear. Debugging becomes guesswork."
+  },
+  {
+    "style": "",
+    "text": "Traces and spans provide the missing structure. They transform isolated events into coherent narratives, enabling engineers to understand not just what happened, but how and why it happened."
+  },
+  {
+    "style": "",
+    "text": "Without this, observability reduces to disconnected logs."
+  },
+  {
+    "style": "",
+    "text": "Looking Ahead"
+  },
+  {
+    "style": "",
+    "text": "With traces and spans, the system now has a model for representing execution. The next step is to understand how this model is created in practice."
+  },
+  {
+    "style": "",
+    "text": "In the following chapter, we examine the\u00a0tracer, the @trace decorator, and the lifecycle hooks that allow developers to instrument code while preserving full observability."
+  },
+  {
+    "style": "",
+    "text": "If this chapter defines how execution is represented, the next defines how that execution graph is produced in code."
+  },
+  {
+    "style": "",
+    "text": "Chapter 1.6"
+  },
+  {
+    "style": "",
+    "text": "The Tracer, the @trace Decorator, and Span Lifecycle Hooks"
+  },
+  {
+    "style": "",
+    "text": "With traces and spans defined, the system now has a model for\u00a0representing\u00a0execution. The remaining problem is practical:\u00a0how are these traces\u00a0actually produced\u00a0in code?"
+  },
+  {
+    "style": "",
+    "text": "Observability systems often fail not because their models are weak, but because their instrumentation is burdensome. If developers\u00a0are required to\u00a0manually create spans, manage context, and emit events at every step, observability becomes inconsistent and\u00a0error-prone."
+  },
+  {
+    "style": "",
+    "text": "SpanForge\u00a0addresses this by making tracing\u00a0implicit, composable, and\u00a0low-friction. At the centre of this design are three elements: the\u00a0tracer, the @trace decorator, and a set of\u00a0span lifecycle hooks."
+  },
+  {
+    "style": "",
+    "text": "Together, they define how execution is captured in code."
+  },
+  {
+    "style": "",
+    "text": "The Tracer as a System Boundary"
+  },
+  {
+    "style": "",
+    "text": "The\u00a0tracer\u00a0is the entry point into the observability system. It\u00a0is responsible for:"
+  },
+  {
+    "style": "",
+    "text": "Creating spans"
+  },
+  {
+    "style": "",
+    "text": "Managing context"
+  },
+  {
+    "style": "",
+    "text": "Emitting events"
+  },
+  {
+    "style": "",
+    "text": "Coordinating lifecycle behaviour"
+  },
+  {
+    "style": "",
+    "text": "In effect, the tracer is the runtime that turns function execution into observability data."
+  },
+  {
+    "style": "",
+    "text": "In\u00a0SpanForge, the tracer is implemented as a\u00a0module-level singleton. This is a deliberate design choice."
+  },
+  {
+    "style": "",
+    "text": "A singleton ensures that all parts of the application share the same tracing context without requiring explicit wiring. It simplifies usage\u2014developers do not need to pass tracer instances through every function\u2014and guarantees consistency across the system."
+  },
+  {
+    "style": "",
+    "text": "Multiple tracers imply multiple truths about execution\u2014this is precisely what observability must avoid."
+  },
+  {
+    "style": "",
+    "text": "This design also aligns with how observability is used in practice. Tracing is not a local concern; it is a cross-cutting concern that spans the entire application."
+  },
+  {
+    "style": "",
+    "text": "Initialisation and Configuration"
+  },
+  {
+    "style": "",
+    "text": "The tracer is typically initialised once, at application startup. During this phase, it is configured with:"
+  },
+  {
+    "style": "",
+    "text": "Exporters for sending events to external systems"
+  },
+  {
+    "style": "",
+    "text": "Sampling strategies"
+  },
+  {
+    "style": "",
+    "text": "Service metadata"
+  },
+  {
+    "style": "",
+    "text": "Optional processors or hooks"
+  },
+  {
+    "style": "",
+    "text": "Once initialised, the tracer becomes globally available. All\u00a0subsequent\u00a0instrumentation relies on this shared instance."
+  },
+  {
+    "style": "",
+    "text": "This model reduces complexity. Instead of configuring observability in multiple places, the system\u00a0establishes\u00a0a single, consistent configuration at startup."
+  },
+  {
+    "style": "",
+    "text": "The @trace Decorator: Instrumentation Without Friction"
+  },
+  {
+    "style": "",
+    "text": "Manual instrumentation is precise, but costly. It requires developers to explicitly create spans, handle errors, and ensure proper closure of each span. In large systems, this quickly becomes impractical."
+  },
+  {
+    "style": "",
+    "text": "The @trace decorator addresses this by automating span creation around function execution."
+  },
+  {
+    "style": "",
+    "text": "When applied to a function, the decorator:"
+  },
+  {
+    "style": "",
+    "text": "Creates a new span at the start of the function"
+  },
+  {
+    "style": "",
+    "text": "Attaches it to the current trace context"
+  },
+  {
+    "style": "",
+    "text": "Records relevant metadata (such as function name and arguments)"
+  },
+  {
+    "style": "",
+    "text": "Captures exceptions if they occur"
+  },
+  {
+    "style": "",
+    "text": "Closes the span when the function completes"
+  },
+  {
+    "style": "",
+    "text": "The decorator enforces a simple invariant: every traced function produces a well-formed span, regardless of how it exits."
+  },
+  {
+    "style": "",
+    "text": "This transforms tracing from an explicit activity into a\u00a0declarative one. Developers\u00a0indicate\u00a0what\u00a0should be traced, not\u00a0how\u00a0to trace it."
+  },
+  {
+    "style": "",
+    "text": "The result is consistent instrumentation with minimal effort."
+  },
+  {
+    "style": "",
+    "text": "Preserving Context Across Boundaries"
+  },
+  {
+    "style": "",
+    "text": "The @trace decorator integrates directly with the context propagation model described in the\u00a0previous\u00a0chapter."
+  },
+  {
+    "style": "",
+    "text": "When a decorated function is called, the tracer retrieves the current context (via\u00a0contextvars) and attaches the new span as a child of the active span. If no active span exists, a new root trace is created."
+  },
+  {
+    "style": "",
+    "text": "This ensures that spans are always correctly linked, regardless of whether execution is synchronous or asynchronous."
+  },
+  {
+    "style": "",
+    "text": "Importantly, this behaviour is automatic. Developers do not need to manually pass context between functions or across await boundaries. The tracer handles this implicitly."
+  },
+  {
+    "style": "",
+    "text": "Span Lifecycle: Beyond Start and End"
+  },
+  {
+    "style": "",
+    "text": "A span is not just a start and end marker. It has a\u00a0lifecycle, and different points in that lifecycle provide opportunities to\u00a0observe\u00a0and influence behaviour."
+  },
+  {
+    "style": "",
+    "text": "SpanForge\u00a0exposes this through\u00a0lifecycle hooks\u2014callbacks that are triggered at specific moments during span execution."
+  },
+  {
+    "style": "",
+    "text": "Hooks are invoked by the tracer at well-defined points in span execution."
+  },
+  {
+    "style": "",
+    "text": "These hooks allow developers to inject logic without\u00a0modifying\u00a0the core tracing system."
+  },
+  {
+    "style": "",
+    "text": "Lifecycle Hooks as Extension Points"
+  },
+  {
+    "style": "",
+    "text": "Two of the most important hooks are:"
+  },
+  {
+    "style": "",
+    "text": "on_llm_call\u00a0\u2014 triggered when an LLM call is initiated"
+  },
+  {
+    "style": "",
+    "text": "on_agent_end\u00a0\u2014 triggered when an agent completes its execution"
+  },
+  {
+    "style": "",
+    "text": "These hooks enable\u00a0cross-cutting concerns\u00a0to be implemented cleanly."
+  },
+  {
+    "style": "",
+    "text": "For example, an\u00a0on_llm_call\u00a0hook might:"
+  },
+  {
+    "style": "",
+    "text": "Record prompt metadata"
+  },
+  {
+    "style": "",
+    "text": "Apply redaction policies"
+  },
+  {
+    "style": "",
+    "text": "Attach cost tracking information"
+  },
+  {
+    "style": "",
+    "text": "An\u00a0on_agent_end\u00a0hook might:"
+  },
+  {
+    "style": "",
+    "text": "Aggregate results"
+  },
+  {
+    "style": "",
+    "text": "Emit summary metrics"
+  },
+  {
+    "style": "",
+    "text": "Trigger compliance checks"
+  },
+  {
+    "style": "",
+    "text": "The key idea is separation of concerns. Core application logic\u00a0remains\u00a0focused on business behaviour, while observability, compliance, and analytics are handled through hooks."
+  },
+  {
+    "style": "",
+    "text": "Decoupling Instrumentation from Logic"
+  },
+  {
+    "style": "",
+    "text": "Lifecycle hooks\u00a0represent\u00a0a broader design principle:\u00a0instrumentation should not pollute application code."
+  },
+  {
+    "style": "",
+    "text": "Without hooks, developers would need to embed observability logic directly into their functions. This leads to tightly coupled code, where business logic and instrumentation are intertwined."
+  },
+  {
+    "style": "",
+    "text": "With hooks, instrumentation becomes modular. It can be added, removed, or\u00a0modified\u00a0without changing the underlying application."
+  },
+  {
+    "style": "",
+    "text": "Instrumentation becomes configuration, not code."
+  },
+  {
+    "style": "",
+    "text": "This is particularly important in AI systems, where requirements evolve rapidly. New compliance rules, cost tracking mechanisms, or evaluation strategies can be introduced without rewriting core workflows."
+  },
+  {
+    "style": "",
+    "text": "Error Handling and Span Integrity"
+  },
+  {
+    "style": "",
+    "text": "One of the critical responsibilities of the tracer is ensuring that spans are\u00a0correctly closed, even in the presence of errors."
+  },
+  {
+    "style": "",
+    "text": "The @trace decorator handles this automatically. If a function raises an exception, the tracer:"
+  },
+  {
+    "style": "",
+    "text": "Records the exception within the span context"
+  },
+  {
+    "style": "",
+    "text": "Marks the span as failed"
+  },
+  {
+    "style": "",
+    "text": "Ensures that the span is properly closed"
+  },
+  {
+    "style": "",
+    "text": "This guarantees that traces\u00a0remain\u00a0structurally consistent. A failed operation does not break the trace; it becomes part of it."
+  },
+  {
+    "style": "",
+    "text": "This is essential for debugging. Errors are not isolated incidents\u2014they are contextualised within the execution flow."
+  },
+  {
+    "style": "",
+    "text": "Tracing as a First-Class Developer Experience"
+  },
+  {
+    "style": "",
+    "text": "A well-designed tracing system is not just technically correct\u2014it is usable."
+  },
+  {
+    "style": "",
+    "text": "SpanForge\u2019s\u00a0approach prioritises\u00a0developer experience. By combining a global tracer, declarative decorators, and lifecycle hooks, it reduces the effort\u00a0required\u00a0to instrument code while\u00a0maintaining\u00a0high fidelity."
+  },
+  {
+    "style": "",
+    "text": "Developers can add tracing to a function with a single annotation. They can extend behaviour through hooks without\u00a0modifying\u00a0core logic. They can rely on the system to handle context propagation and error handling automatically."
+  },
+  {
+    "style": "",
+    "text": "This lowers the barrier to adoption and ensures that observability is applied consistently across the codebase."
+  },
+  {
+    "style": "",
+    "text": "Why This Matters"
+  },
+  {
+    "style": "",
+    "text": "In complex systems, incomplete instrumentation is\u00a0almost as\u00a0problematic as no instrumentation at all. Missing spans, broken context, or inconsistent data can make traces misleading."
+  },
+  {
+    "style": "",
+    "text": "By centralising tracing logic in the tracer and automating instrumentation through decorators,\u00a0SpanForge\u00a0ensures that traces are\u00a0complete, consistent, and reliable."
+  },
+  {
+    "style": "",
+    "text": "Lifecycle hooks add flexibility without sacrificing structure, allowing the system to adapt to new requirements without compromising its core model."
+  },
+  {
+    "style": "",
+    "text": "The result is an observability system that is both correct and usable."
+  },
+  {
+    "style": "",
+    "text": "Looking Ahead"
+  },
+  {
+    "style": "",
+    "text": "With the tracer in place, the system can now produce traces automatically. The next challenge is handling these traces\u00a0efficiently\u2014buffering\u00a0them, exporting them, and ensuring that they do not interfere with application performance."
+  },
+  {
+    "style": "",
+    "text": "In the following chapter, we examine the\u00a0batch exporter, exploring how\u00a0SpanForge\u00a0manages buffering, backpressure, and circuit breaking to deliver observability data reliably at scale."
+  },
+  {
+    "style": "",
+    "text": "If this chapter defines how traces are produced, the next defines how they are delivered reliably."
+  },
+  {
+    "style": "",
+    "text": "Chapter 1.7"
+  },
+  {
+    "style": "",
+    "text": "The Batch Exporter \u2014 Buffering, Backpressure, and Circuit Breaking"
+  },
+  {
+    "style": "",
+    "text": "With tracing in place, SpanForge can now produce a continuous stream of structured events representing system execution. The next problem is no longer\u00a0what to capture, but\u00a0how to deliver it reliably under load."
+  },
+  {
+    "style": "",
+    "text": "Exporting observability data is deceptively complex. A na\u00efve implementation\u2014sending each event synchronously as it is created\u2014quickly becomes a bottleneck. It introduces latency into application code, amplifies failures in downstream systems, and risks cascading outages when export destinations become unavailable."
+  },
+  {
+    "style": "",
+    "text": "The batch exporter exists to solve this problem. It ensures that observability data is delivered\u00a0efficiently, safely, and without interfering with the application itself."
+  },
+  {
+    "style": "",
+    "text": "Why Synchronous Export Fails"
+  },
+  {
+    "style": "",
+    "text": "At first glance, exporting events synchronously seems straightforward. When an event is created, it is immediately sent to its destination\u2014whether that is a logging system, a tracing backend, or a compliance store."
+  },
+  {
+    "style": "",
+    "text": "This approach fails for three fundamental reasons."
+  },
+  {
+    "style": "",
+    "text": "First, it couples application performance to external systems. If the exporter is slow, every traced operation becomes slow. Observability, which should be passive, becomes intrusive."
+  },
+  {
+    "style": "",
+    "text": "Second, it amplifies failure. If the export destination is unavailable, synchronous export either blocks indefinitely or forces the application to handle errors that are unrelated to its core logic."
+  },
+  {
+    "style": "",
+    "text": "Third, it scales poorly. High-throughput systems generate large volumes of events. Sending each event individually creates unnecessary overhead and inefficient network usage."
+  },
+  {
+    "style": "",
+    "text": "Observability must never become a source of instability. Synchronous export violates this principle."
+  },
+  {
+    "style": "",
+    "text": "Buffering as a First Principle"
+  },
+  {
+    "style": "",
+    "text": "The batch exporter addresses these issues by introducing\u00a0buffering."
+  },
+  {
+    "style": "",
+    "text": "Instead of sending events immediately, the system accumulates them in an in-memory queue. Events are then exported in batches, either when the buffer reaches a certain size or after a fixed time interval."
+  },
+  {
+    "style": "",
+    "text": "This simple shift has significant effects."
+  },
+  {
+    "style": "",
+    "text": "Buffering decouples event production from event delivery. Application code can emit events quickly and continue execution without waiting for external systems. Export becomes an asynchronous concern, handled independently of the main execution path."
+  },
+  {
+    "style": "",
+    "text": "Batching also improves efficiency. Sending multiple events in a single request reduces network overhead and allows downstream systems to process data more effectively."
+  },
+  {
+    "style": "",
+    "text": "The result is a system where observability is present, but not intrusive."
+  },
+  {
+    "style": "",
+    "text": "The Background Worker Model"
+  },
+  {
+    "style": "",
+    "text": "To implement buffering, the exporter runs a\u00a0background worker thread."
+  },
+  {
+    "style": "",
+    "text": "This worker is responsible for:"
+  },
+  {
+    "style": "",
+    "text": "Draining the event queue"
+  },
+  {
+    "style": "",
+    "text": "Grouping events into batches"
+  },
+  {
+    "style": "",
+    "text": "Sending batches to configured exporters"
+  },
+  {
+    "style": "",
+    "text": "Handling retries and failures"
+  },
+  {
+    "style": "",
+    "text": "The main application thread does not perform any export operations. It simply enqueues events and continues execution."
+  },
+  {
+    "style": "",
+    "text": "This separation is critical. It ensures that the performance characteristics of the application are independent of the behaviour of external systems."
+  },
+  {
+    "style": "",
+    "text": "The background worker effectively acts as a boundary between the application and the outside world."
+  },
+  {
+    "style": "",
+    "text": "Queue Depth and Flow Control"
+  },
+  {
+    "style": "",
+    "text": "Buffering introduces a new concern:\u00a0what happens when the queue fills up?"
+  },
+  {
+    "style": "",
+    "text": "In high-throughput systems, event production may outpace export capacity. If left unchecked, the queue could grow indefinitely, leading to memory exhaustion."
+  },
+  {
+    "style": "",
+    "text": "SpanForge addresses this through controlled queue depth and overflow handling strategies."
+  },
+  {
+    "style": "",
+    "text": "The queue has a finite capacity. When it reaches this limit, the system must decide how to respond. Common strategies include:"
+  },
+  {
+    "style": "",
+    "text": "Dropping new events"
+  },
+  {
+    "style": "",
+    "text": "Dropping oldest events"
+  },
+  {
+    "style": "",
+    "text": "Blocking producers"
+  },
+  {
+    "style": "",
+    "text": "SpanForge prioritises\u00a0application stability. Observability is important, but it must not compromise the system it observes. In practice, this means avoiding blocking application threads and instead applying controlled loss or backpressure mechanisms."
+  },
+  {
+    "style": "",
+    "text": "This introduces the concept of\u00a0backpressure."
+  },
+  {
+    "style": "",
+    "text": "Backpressure and System Stability"
+  },
+  {
+    "style": "",
+    "text": "Backpressure is the mechanism by which a system regulates itself when downstream components cannot keep up."
+  },
+  {
+    "style": "",
+    "text": "In the context of the batch exporter, backpressure ensures that excessive event production does not overwhelm the system. Rather than allowing unbounded growth, the system applies limits and degrades gracefully under load."
+  },
+  {
+    "style": "",
+    "text": "This may involve:"
+  },
+  {
+    "style": "",
+    "text": "Dropping low-priority events"
+  },
+  {
+    "style": "",
+    "text": "Reducing sampling rates dynamically"
+  },
+  {
+    "style": "",
+    "text": "Signalling overload conditions through metrics or logs (e.g., queue_depth, dropped_events)"
+  },
+  {
+    "style": "",
+    "text": "The goal is not to preserve every event at all costs. The goal is to maintain overall system stability while retaining as much observability signal as possible."
+  },
+  {
+    "style": "",
+    "text": "This reflects a fundamental principle:\u00a0observability must degrade gracefully under pressure."
+  },
+  {
+    "style": "",
+    "text": "Circuit Breaking for Exporters"
+  },
+  {
+    "style": "",
+    "text": "Buffering and backpressure handle throughput, but they do not address persistent failure in downstream systems."
+  },
+  {
+    "style": "",
+    "text": "If an export destination repeatedly fails\u2014due to network issues, misconfiguration, or service outages\u2014the exporter must avoid repeatedly attempting operations that are likely to fail."
+  },
+  {
+    "style": "",
+    "text": "This is where\u00a0circuit breaking\u00a0comes into play."
+  },
+  {
+    "style": "",
+    "text": "Each exporter is wrapped in a circuit breaker that tracks its success and failure history. After a predefined number of consecutive failures, the circuit transitions to an\u00a0OPEN\u00a0state."
+  },
+  {
+    "style": "",
+    "text": "In the OPEN state:"
+  },
+  {
+    "style": "",
+    "text": "Export attempts are skipped immediately"
+  },
+  {
+    "style": "",
+    "text": "No network calls are made"
+  },
+  {
+    "style": "",
+    "text": "The system avoids wasting resources on failing operations"
+  },
+  {
+    "style": "",
+    "text": "Failure is contained, not propagated."
+  },
+  {
+    "style": "",
+    "text": "After a cooldown period\u2014typically on the order of tens of seconds\u2014the circuit transitions to a\u00a0HALF-OPEN\u00a0state, where a limited number of test requests are allowed. If these succeed, the circuit closes and normal operation resumes."
+  },
+  {
+    "style": "",
+    "text": "This mechanism prevents cascading failures and protects both the application and downstream systems."
+  },
+  {
+    "style": "",
+    "text": "Per-Exporter Isolation"
+  },
+  {
+    "style": "",
+    "text": "SpanForge supports multiple export destinations\u2014such as tracing backends, logging systems, and compliance stores. Each of these exporters operates independently."
+  },
+  {
+    "style": "",
+    "text": "Each exporter maintains its own queue, worker, and circuit state."
+  },
+  {
+    "style": "",
+    "text": "Circuit breakers are applied\u00a0per exporter, not globally."
+  },
+  {
+    "style": "",
+    "text": "This is a critical design decision. A failure in one destination should not block or degrade others. If a logging backend is unavailable, trace export should continue. If a compliance sink fails, cost tracking should still be delivered."
+  },
+  {
+    "style": "",
+    "text": "This isolation ensures that the system remains resilient even when individual components fail."
+  },
+  {
+    "style": "",
+    "text": "Reliability Without Intrusion"
+  },
+  {
+    "style": "",
+    "text": "The batch exporter embodies a key design goal:\u00a0reliability without intrusion."
+  },
+  {
+    "style": "",
+    "text": "It ensures that observability data is delivered as reliably as possible, while never interfering with the core application. It absorbs downstream variability, smooths bursts, and isolates failure."
+  },
+  {
+    "style": "",
+    "text": "At the same time, it acknowledges that perfect delivery is not always possible. Under extreme conditions, some data may be dropped. This is a conscious tradeoff, made in favour of system stability."
+  },
+  {
+    "style": "",
+    "text": "Observability should inform the system, not endanger it."
+  },
+  {
+    "style": "",
+    "text": "Why This Matters"
+  },
+  {
+    "style": "",
+    "text": "Without a robust export mechanism, even the best observability model is ineffective. Events that cannot be delivered cannot be analysed. Traces that are incomplete cannot be trusted."
+  },
+  {
+    "style": "",
+    "text": "At the same time, a poorly designed exporter can introduce new failure modes\u2014latency spikes, resource exhaustion, cascading outages."
+  },
+  {
+    "style": "",
+    "text": "The batch exporter resolves this tension. It provides a controlled, resilient pathway from event generation to external systems."
+  },
+  {
+    "style": "",
+    "text": "It ensures that observability remains\u00a0a passive observer, not an active risk."
+  },
+  {
+    "style": "",
+    "text": "Looking Ahead"
+  },
+  {
+    "style": "",
+    "text": "With event capture, structuring, tracing, and export in place, the core data pipeline of SpanForge is complete."
+  },
+  {
+    "style": "",
+    "text": "The next chapter builds on this foundation by examining\u00a0sampling strategies\u2014how the system decides which traces to retain, which to drop, and how to balance fidelity with cost."
+  },
+  {
+    "style": "",
+    "text": "If this chapter defines how data is delivered, the next defines how much of that data should be retained."
+  },
+  {
+    "style": "",
+    "text": "Chapter 1.8"
+  },
+  {
+    "style": "",
+    "text": "Sampling Strategies \u2014 TraceIdRatio, ParentBased, AlwaysOn"
+  },
+  {
+    "style": "",
+    "text": "With event capture, tracing, and export mechanisms in place, SpanForge now has a complete pipeline for producing observability data. The final problem in this pipeline is\u00a0scale."
+  },
+  {
+    "style": "",
+    "text": "In non-trivial systems, the volume of events can grow rapidly. Every request produces a trace, every trace produces spans, and every span emits events. At scale, this can result in an overwhelming amount of data\u2014far more than can be stored, processed, or analysed efficiently."
+  },
+  {
+    "style": "",
+    "text": "Sampling exists to address this reality. It determines\u00a0which traces are retained and which are discarded, balancing observability fidelity against cost and performance."
+  },
+  {
+    "style": "",
+    "text": "The Necessity of Sampling"
+  },
+  {
+    "style": "",
+    "text": "In an ideal system, every trace would be recorded. This would provide perfect visibility into system behaviour. In practice, this is rarely feasible."
+  },
+  {
+    "style": "",
+    "text": "High-throughput applications may generate millions of traces per hour. Storing and processing this volume of data introduces significant cost. It also creates noise, making it harder to identify meaningful patterns."
+  },
+  {
+    "style": "",
+    "text": "Sampling introduces selectivity. Instead of recording every trace, the system captures a representative subset."
+  },
+  {
+    "style": "",
+    "text": "The challenge is not simply reducing\u00a0volume, but\u00a0doing so\u00a0without losing critical information."
+  },
+  {
+    "style": "",
+    "text": "Head-Based Sampling"
+  },
+  {
+    "style": "",
+    "text": "SpanForge primarily uses\u00a0head-based sampling."
+  },
+  {
+    "style": "",
+    "text": "In this model, the decision to sample a trace is made at the beginning of the trace\u2014when the root span is created. Once that decision is made, it applies to the entire trace. All spans within that trace are either recorded or discarded together."
+  },
+  {
+    "style": "",
+    "text": "This approach has two advantages."
+  },
+  {
+    "style": "",
+    "text": "First, it is efficient. Sampling decisions are made once, avoiding the need to evaluate each span individually."
+  },
+  {
+    "style": "",
+    "text": "Second, it preserves trace integrity. Partial traces are avoided, ensuring that retained traces are complete and meaningful."
+  },
+  {
+    "style": "",
+    "text": "However, this approach has a limitation. It cannot account for outcomes. A trace that later contains an error may already have been dropped."
+  },
+  {
+    "style": "",
+    "text": "This tradeoff is fundamental to head-based sampling."
+  },
+  {
+    "style": "",
+    "text": "TraceIdRatio Sampling"
+  },
+  {
+    "style": "",
+    "text": "One of the simplest and most widely used strategies is\u00a0TraceIdRatio sampling."
+  },
+  {
+    "style": "",
+    "text": "In this approach, the sampling decision is based on the trace identifier. A deterministic function maps the trace ID to a value, and the trace is retained if that value falls within a configured threshold."
+  },
+  {
+    "style": "",
+    "text": "Typically, this is implemented by hashing the trace ID and comparing it against the sampling threshold."
+  },
+  {
+    "style": "",
+    "text": "For example, with a sampling rate of 0.1, approximately 10% of traces are retained."
+  },
+  {
+    "style": "",
+    "text": "The key property of this method is\u00a0determinism. Given the same trace ID, the sampling decision is always the same. This ensures consistency across distributed systems, where multiple services may independently evaluate the same trace."
+  },
+  {
+    "style": "",
+    "text": "TraceIdRatio sampling provides a uniform, unbiased sample of traces. It is simple, predictable, and effective for general-purpose observability."
+  },
+  {
+    "style": "",
+    "text": "Parent-Based Sampling"
+  },
+  {
+    "style": "",
+    "text": "In distributed systems, traces often span multiple services. Ensuring consistent sampling decisions across these boundaries is critical."
+  },
+  {
+    "style": "",
+    "text": "Sampling must be consistent across the entire trace, not per service."
+  },
+  {
+    "style": "",
+    "text": "ParentBased sampling\u00a0addresses this by propagating the sampling decision from parent to child spans."
+  },
+  {
+    "style": "",
+    "text": "When a service receives a request with an existing trace context, it does not make an independent sampling decision. Instead, it inherits the decision from the parent span."
+  },
+  {
+    "style": "",
+    "text": "This ensures that a trace is either fully captured across all services or not captured at all. Without this, different parts of the same trace could be inconsistently sampled, resulting in fragmented and misleading data."
+  },
+  {
+    "style": "",
+    "text": "ParentBased sampling is typically combined with another strategy\u2014such as TraceIdRatio\u2014for root span decisions. Together, they ensure both consistency and control."
+  },
+  {
+    "style": "",
+    "text": "AlwaysOn Sampling"
+  },
+  {
+    "style": "",
+    "text": "At the opposite end of the spectrum is\u00a0AlwaysOn sampling, where every trace is recorded."
+  },
+  {
+    "style": "",
+    "text": "This strategy is appropriate in environments where:"
+  },
+  {
+    "style": "",
+    "text": "Traffic volume is low"
+  },
+  {
+    "style": "",
+    "text": "Full fidelity is required"
+  },
+  {
+    "style": "",
+    "text": "Debugging or development is the primary goal"
+  },
+  {
+    "style": "",
+    "text": "AlwaysOn sampling provides complete visibility, but it does not scale well. In production systems with high throughput, it quickly becomes impractical due to cost and storage constraints."
+  },
+  {
+    "style": "",
+    "text": "For this reason, AlwaysOn is typically used selectively, rather than as a default."
+  },
+  {
+    "style": "",
+    "text": "The Importance of Error Retention"
+  },
+  {
+    "style": "",
+    "text": "One of the most critical considerations in sampling is\u00a0error visibility."
+  },
+  {
+    "style": "",
+    "text": "Errors are rare compared to successful operations, but they are disproportionately important. Dropping error traces defeats the purpose of observability."
+  },
+  {
+    "style": "",
+    "text": "SpanForge enforces a simple rule:\u00a0error traces must always be sampled."
+  },
+  {
+    "style": "",
+    "text": "Even in systems with aggressive sampling rates, traces that contain errors are retained. In practice, this is often enforced through configuration such as always_sample_errors=True."
+  },
+  {
+    "style": "",
+    "text": "This principle overrides standard sampling decisions when necessary. It reflects a prioritisation of signal over uniformity."
+  },
+  {
+    "style": "",
+    "text": "Configuring Sampling Dynamically"
+  },
+  {
+    "style": "",
+    "text": "Sampling is not a static decision. Different environments and use cases require different levels of visibility."
+  },
+  {
+    "style": "",
+    "text": "SpanForge allows sampling rates to be configured dynamically, often at the project or deployment level. This enables:"
+  },
+  {
+    "style": "",
+    "text": "Higher sampling rates in staging or debugging environments"
+  },
+  {
+    "style": "",
+    "text": "Lower rates in high-throughput production systems"
+  },
+  {
+    "style": "",
+    "text": "Targeted increases during incident investigation"
+  },
+  {
+    "style": "",
+    "text": "Importantly, these configurations can be adjusted without changing application code. Sampling becomes an operational concern, rather than a development concern."
+  },
+  {
+    "style": "",
+    "text": "This flexibility is essential for maintaining the balance between observability and cost over time."
+  },
+  {
+    "style": "",
+    "text": "Tradeoffs and Limitations"
+  },
+  {
+    "style": "",
+    "text": "Sampling is inherently a tradeoff. Reducing data volume means accepting some loss of information."
+  },
+  {
+    "style": "",
+    "text": "The goal is not to eliminate this loss, but to manage it intelligently."
+  },
+  {
+    "style": "",
+    "text": "Head-based sampling may miss rare but important events. AlwaysOn sampling may overwhelm the system. Deterministic strategies may miss rare or anomalous behaviour."
+  },
+  {
+    "style": "",
+    "text": "Understanding these limitations is part of using sampling effectively. No single strategy is sufficient in all contexts."
+  },
+  {
+    "style": "",
+    "text": "The strength of SpanForge lies in providing multiple strategies that can be combined and tuned to meet specific requirements."
+  },
+  {
+    "style": "",
+    "text": "Why This Matters"
+  },
+  {
+    "style": "",
+    "text": "Without sampling, observability systems do not scale. They become expensive, slow, and difficult to operate."
+  },
+  {
+    "style": "",
+    "text": "With poorly configured sampling, they become incomplete and unreliable."
+  },
+  {
+    "style": "",
+    "text": "Effective sampling ensures that observability remains\u00a0useful, reliable, and economically sustainable. It preserves the signals that matter while controlling the cost of capturing them."
+  },
+  {
+    "style": "",
+    "text": "In AI systems, where event volume and cost are tightly coupled, this balance is particularly important."
+  },
+  {
+    "style": "",
+    "text": "Completing the Foundations"
+  },
+  {
+    "style": "",
+    "text": "This chapter completes Part 1 of the SpanForge curriculum."
+  },
+  {
+    "style": "",
+    "text": "At this point, the core primitives of the system are defined:"
+  },
+  {
+    "style": "",
+    "text": "Events provide structure"
+  },
+  {
+    "style": "",
+    "text": "Identifiers provide order"
+  },
+  {
+    "style": "",
+    "text": "The registry provides meaning"
+  },
+  {
+    "style": "",
+    "text": "Traces and spans provide execution context"
+  },
+  {
+    "style": "",
+    "text": "The tracer provides instrumentation"
+  },
+  {
+    "style": "",
+    "text": "The exporter provides delivery"
+  },
+  {
+    "style": "",
+    "text": "Sampling provides scale"
+  },
+  {
+    "style": "",
+    "text": "Together, these components form a\u00a0complete, production-grade observability pipeline."
+  },
+  {
+    "style": "",
+    "text": "Looking Ahead"
+  },
+  {
+    "style": "",
+    "text": "With the foundations established, the next part of the curriculum shifts\u00a0focus\u00a0from structure to\u00a0security."
+  },
+  {
+    "style": "",
+    "text": "In Part 2, we examine the cryptographic primitives that underpin SpanForge\u2019s audit model\u2014beginning with HMAC signing and the guarantees it provides."
+  },
+  {
+    "style": "",
+    "text": "If Part 1 defines how the system observes itself, Part 2 defines how it proves that those observations can be trusted."
+  }
+]

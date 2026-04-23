@@ -1,0 +1,225 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String?
+  role      String   @default("user")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assessments      Assessment[]
+  savedLaws        SavedLaw[]
+  alertPreferences AlertPreference[]
+  orgMemberships   OrganizationMember[]
+  assignedItems    ChecklistItem[]     @relation("Assignee")
+
+  @@map("users")
+}
+
+model Law {
+  id             String    @id @default(cuid())
+  slug           String    @unique
+  title          String
+  shortTitle     String?
+  jurisdiction   String?
+  topics         String?
+  issuingBody    String?
+  status         String?
+  contentType    String?
+  summaryShort   String?
+  summaryLong    String?
+  officialUrl    String?
+  adoptedDate    DateTime?
+  effectiveDate  DateTime?
+  lastReviewedAt DateTime?
+  isPublished    Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  obligations        Obligation[]
+  applicabilityRules ApplicabilityRule[]
+  savedBy            SavedLaw[]
+  changelog          LawChangelog[]
+  assessmentResults  AssessmentResult[]
+
+  @@map("laws")
+}
+
+model Obligation {
+  id             String   @id @default(cuid())
+  lawId          String
+  law            Law      @relation(fields: [lawId], references: [id])
+  title          String
+  description    String?
+  category       String?
+  priority       String?
+  citation       String?
+  actionRequired String?
+  createdAt      DateTime @default(now())
+
+  checklistItems ChecklistItem[]
+
+  @@map("obligations")
+}
+
+model ApplicabilityRule {
+  id       String  @id @default(cuid())
+  lawId    String
+  law      Law     @relation(fields: [lawId], references: [id])
+  name     String?
+  ruleJson String
+  weight   Float   @default(1)
+  enabled  Boolean @default(true)
+
+  @@map("applicability_rules")
+}
+
+model Assessment {
+  id               String   @id @default(cuid())
+  userId           String?
+  user             User?    @relation(fields: [userId], references: [id])
+  name             String?
+  companyProfile   String
+  productProfile   String
+  technicalProfile String
+  createdAt        DateTime @default(now())
+
+  results    AssessmentResult[]
+  checklists Checklist[]
+
+  @@map("assessments")
+}
+
+model AssessmentResult {
+  id                  String     @id @default(cuid())
+  assessmentId        String
+  assessment          Assessment @relation(fields: [assessmentId], references: [id])
+  lawId               String?
+  law                 Law?       @relation(fields: [lawId], references: [id])
+  lawSlug             String
+  relevanceScore      Float?
+  applicabilityStatus String?
+  rationale           String?
+  createdAt           DateTime   @default(now())
+
+  @@map("assessment_results")
+}
+
+model Checklist {
+  id           String     @id @default(cuid())
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id])
+  title        String?
+  createdAt    DateTime   @default(now())
+
+  items ChecklistItem[]
+
+  @@map("checklists")
+}
+
+model ChecklistItem {
+  id           String      @id @default(cuid())
+  checklistId  String
+  checklist    Checklist   @relation(fields: [checklistId], references: [id])
+  obligationId String?
+  obligation   Obligation? @relation(fields: [obligationId], references: [id])
+  lawSlug      String?
+  title        String
+  description  String?
+  category     String?
+  citation     String?
+  status       String      @default("not_started")
+  priority     String?
+  assigneeId   String?
+  assignee     User?       @relation("Assignee", fields: [assigneeId], references: [id])
+  updatedAt    DateTime    @updatedAt
+  createdAt    DateTime    @default(now())
+
+  @@map("checklist_items")
+}
+
+model SavedLaw {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  lawSlug   String
+  law       Law      @relation(fields: [lawSlug], references: [slug])
+  createdAt DateTime @default(now())
+
+  @@unique([userId, lawSlug])
+  @@map("saved_laws")
+}
+
+model LawChangelog {
+  id         String   @id @default(cuid())
+  lawSlug    String
+  law        Law      @relation(fields: [lawSlug], references: [slug])
+  changeType String
+  summary    String
+  details    String?
+  changedAt  DateTime @default(now())
+
+  @@map("law_changelog")
+}
+
+model AlertPreference {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  lawSlug      String?
+  jurisdiction String?
+  emailEnabled Boolean  @default(true)
+  digestMode   String   @default("immediate")
+  createdAt    DateTime @default(now())
+
+  @@map("alert_preferences")
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  members OrganizationMember[]
+  invites OrganizationInvite[]
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+  role           String       @default("member")
+  joinedAt       DateTime     @default(now())
+
+  @@unique([organizationId, userId])
+  @@map("organization_members")
+}
+
+model OrganizationInvite {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  email          String
+  token          String       @unique @default(cuid())
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@map("organization_invites")
+}

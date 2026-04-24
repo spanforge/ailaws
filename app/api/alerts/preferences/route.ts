@@ -69,3 +69,34 @@ export async function DELETE(req: NextRequest) {
   await prisma.alertPreference.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }
+
+export async function PATCH(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await req.json() as {
+    id?: string;
+    emailEnabled?: boolean;
+    digestMode?: string;
+  };
+
+  if (!body.id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+  if (body.digestMode && !["immediate", "daily", "weekly"].includes(body.digestMode)) {
+    return NextResponse.json({ error: "Invalid digest mode" }, { status: 400 });
+  }
+
+  const pref = await prisma.alertPreference.findUnique({ where: { id: body.id } });
+  if (!pref || pref.userId !== session.user.id) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const updated = await prisma.alertPreference.update({
+    where: { id: body.id },
+    data: {
+      emailEnabled: body.emailEnabled ?? pref.emailEnabled,
+      digestMode: body.digestMode ?? pref.digestMode,
+    },
+  });
+
+  return NextResponse.json({ data: updated });
+}

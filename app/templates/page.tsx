@@ -2,7 +2,7 @@ import Link from "next/link";
 import { TEMPLATE_LIBRARY } from "@/lib/smb";
 
 export const metadata = {
-  title: "Templates - LexForge",
+  title: "Templates - Spanforge Compass",
   description: "Download practical AI compliance templates for small teams.",
 };
 
@@ -24,7 +24,7 @@ export default function TemplatesPage() {
           Download starter templates for your team
         </h1>
         <p style={{ color: "var(--muted)", margin: "0 0 2rem" }}>
-          Founder-ready policies, notices, and checklists you can adapt for internal rollout and external review.
+          Founder-ready policies, notices, and checklists in editable document format for internal rollout, procurement, and external review.
         </p>
 
         <div className="card-grid">
@@ -38,7 +38,7 @@ export default function TemplatesPage() {
                   </h2>
                 </div>
                 <a href={`/templates/${template.slug}`} className="button button--primary" style={{ textDecoration: "none", whiteSpace: "nowrap" }}>
-                  Download
+                  Download {template.formatLabel}
                 </a>
               </div>
               <p style={{ color: "var(--muted)", fontSize: "0.92rem", margin: "0 0 0.85rem" }}>{template.useCase}</p>
@@ -48,6 +48,12 @@ export default function TemplatesPage() {
                     Last reviewed
                   </p>
                   <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.9rem" }}>{template.lastReviewed}</p>
+                </div>
+                <div style={{ padding: "0.75rem 0.85rem", borderRadius: "12px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+                  <p style={{ margin: "0 0 0.2rem", fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)" }}>
+                    Format
+                  </p>
+                  <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.9rem" }}>{template.formatLabel} for browser, Word, and Google Docs</p>
                 </div>
                 <div style={{ padding: "0.75rem 0.85rem", borderRadius: "12px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
                   <p style={{ margin: "0 0 0.2rem", fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)" }}>

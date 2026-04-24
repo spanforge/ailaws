@@ -8,11 +8,20 @@ import { runRulesEngine, type AssessmentInput, type AssessmentResult } from "@/l
 import {
   TEMPLATE_LIBRARY,
   buildActionPlan,
+  buildAssessmentDeltaSummary,
   enrichAssessmentResults,
   getActionTimelineLabel,
   getProductPresetById,
   type ActionPlanItem,
 } from "@/lib/smb";
+import {
+  buildClauseGapReport,
+  buildDriftTriggers,
+  buildSimulationDeltaFromResults,
+  buildTrustScorecard,
+  type ClauseGapEntry,
+  type WorkspaceChecklistItem,
+} from "@/lib/workspace-intelligence";
 
 type ChecklistItem = {
   id: string;
@@ -32,15 +41,26 @@ type Checklist = {
 
 type AssessmentRecord = {
   id: string;
+  name: string | null;
+  createdAt: string;
   companyProfile: string;
   productProfile: string;
   technicalProfile: string;
+  checklists?: Checklist[];
   results: Array<{
     lawSlug: string;
     relevanceScore: number;
     applicabilityStatus: string;
     rationale: string;
   }>;
+};
+
+type ChangeEntry = {
+  id: string;
+  lawSlug: string;
+  lawShortTitle: string;
+  summary: string;
+  changedAt: string;
 };
 
 const STATUS_CONFIG = {
@@ -57,6 +77,26 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 const TIMELINE_ORDER = ["this_week", "this_month", "later"] as const;
+const TARGET_MARKETS = [
+  { code: "EU", label: "European Union" },
+  { code: "US", label: "United States" },
+  { code: "UK", label: "United Kingdom" },
+  { code: "CA", label: "Canada" },
+  { code: "SG", label: "Singapore" },
+  { code: "IN", label: "India" },
+  { code: "AE", label: "United Arab Emirates" },
+  { code: "ES", label: "Spain" },
+];
+const USE_CASE_OPTIONS = [
+  { value: "hr", label: "HR / Recruitment" },
+  { value: "credit_scoring", label: "Credit / Lending" },
+  { value: "medical", label: "Medical / Healthcare" },
+  { value: "biometric", label: "Biometric Identification" },
+  { value: "content_generation", label: "Content Generation" },
+  { value: "customer_service", label: "Customer Service" },
+  { value: "education", label: "Education" },
+  { value: "housing", label: "Housing" },
+];
 
 function csvEscape(value: string | number | undefined | null): string {
   const normalized = String(value ?? "");
@@ -105,17 +145,28 @@ function mapStoredResults(record: AssessmentRecord): AssessmentResult[] {
 }
 
 function exportResultsCsv(results: ReturnType<typeof enrichAssessmentResults>, assessmentId: string) {
-  const header = ["Law", "Status", "Summary", "Who this applies to", "Why you matched", "What to do first"];
+  const header = [
+    "Law",
+    "Status",
+    "Summary",
+    "Why this matters this week",
+    "Who this applies to",
+    "Why you matched",
+    "What to do first",
+    "Last reviewed",
+  ];
   const rows = results.map((result) => [
     result.law_short_title,
     result.applicability_status,
     result.plainSummary,
+    result.whyThisMattersThisWeek,
     result.whoThisAppliesTo,
     result.whyYouMatched,
     result.whatToDoFirst,
+    result.lastReviewed,
   ]);
 
-  downloadCsv(`lexforge-results-${assessmentId}.csv`, [header, ...rows]);
+  downloadCsv(`spanforge-compass-results-${assessmentId}.csv`, [header, ...rows]);
 }
 
 function exportActionPlanCsv(actions: ActionPlanItem[], assessmentId: string) {
@@ -131,7 +182,28 @@ function exportActionPlanCsv(actions: ActionPlanItem[], assessmentId: string) {
     action.citation,
   ]);
 
-  downloadCsv(`lexforge-action-plan-${assessmentId}.csv`, [header, ...rows]);
+  downloadCsv(`spanforge-compass-action-plan-${assessmentId}.csv`, [header, ...rows]);
+}
+
+function mapChecklistItems(checklist: Checklist | null, itemStatuses: Record<string, ChecklistItem["status"]>): WorkspaceChecklistItem[] {
+  if (!checklist) return [];
+
+  return checklist.items.map((item) => ({
+    id: item.id,
+    lawSlug: item.lawSlug,
+    title: item.title,
+    citation: null,
+    category: item.category,
+    priority: item.priority,
+    status: itemStatuses[item.id] ?? item.status,
+  }));
+}
+
+function toneColor(status: ClauseGapEntry["status"]) {
+  if (status === "covered") return "var(--green)";
+  if (status === "in_progress") return "#915a1e";
+  if (status === "not_generated") return "#2b6cb0";
+  return "var(--red)";
 }
 
 export default function ResultsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -142,38 +214,69 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
   const [checklist, setChecklist] = useState<Checklist | null>(null);
   const [loadingChecklist, setLoadingChecklist] = useState(false);
   const [itemStatuses, setItemStatuses] = useState<Record<string, ChecklistItem["status"]>>({});
-  const [activeTab, setActiveTab] = useState<"results" | "actions" | "checklist">("results");
+  const [activeTab, setActiveTab] = useState<"results" | "actions" | "checklist" | "gaps" | "simulate">("results");
+  const [assessmentRecord, setAssessmentRecord] = useState<AssessmentRecord | null>(null);
+  const [previousResults, setPreviousResults] = useState<AssessmentResult[] | null>(null);
+  const [founderMode, setFounderMode] = useState(false);
+  const [alerts, setAlerts] = useState<ChangeEntry[]>([]);
+  const [simulationInput, setSimulationInput] = useState<AssessmentInput | null>(null);
 
   useEffect(() => {
     const storedResults = sessionStorage.getItem(`assessment-${id}`);
     const storedInput = sessionStorage.getItem(`assessment-input-${id}`) ?? sessionStorage.getItem("assessment-draft");
+    const hasSessionBackedAssessment = Boolean(storedResults || storedInput);
 
     if (storedInput) {
       const parsedInput = JSON.parse(storedInput) as AssessmentInput;
       setInput(parsedInput);
+      setSimulationInput(parsedInput);
       setResults(runRulesEngine(laws, parsedInput));
-      return;
-    }
-
-    if (storedResults) {
+    } else if (storedResults) {
       setResults(JSON.parse(storedResults) as AssessmentResult[]);
     }
 
-    fetch("/api/assessments")
-      .then((response) => response.json())
-      .then((data) => {
-        const match = (data.data ?? []).find((assessment: AssessmentRecord) => assessment.id === id) as AssessmentRecord | undefined;
+    Promise.all([
+      fetch("/api/assessments")
+        .then(async (response) => {
+          if (!response.ok) return null;
+          return response.json();
+        })
+        .catch(() => null),
+      fetch("/api/alerts").then((response) => response.json()).catch(() => ({ data: [] })),
+    ])
+      .then(([data, alertsResponse]) => {
+        const records = ((data?.data ?? []) as AssessmentRecord[]);
+        const match = records.find((assessment) => assessment.id === id);
+
+        setAlerts((alertsResponse.data ?? []) as ChangeEntry[]);
+
         if (!match) {
-          window.location.href = "/assess";
+          if (!hasSessionBackedAssessment) {
+            window.location.href = "/assess";
+          }
           return;
         }
 
         const parsedInput = parseAssessmentInput(match);
         setInput(parsedInput);
+        setSimulationInput(parsedInput);
         setResults(runRulesEngine(laws, parsedInput));
+        setAssessmentRecord(match);
+
+        const persistedChecklist = match.checklists?.[0] ?? null;
+        setChecklist(persistedChecklist);
+        if (persistedChecklist) {
+          setItemStatuses(Object.fromEntries(persistedChecklist.items.map((item) => [item.id, item.status])));
+        }
+
+        const currentIndex = records.findIndex((assessment) => assessment.id === id);
+        const previous = currentIndex >= 0 ? records.slice(currentIndex + 1).find(Boolean) : undefined;
+        setPreviousResults(previous ? mapStoredResults(previous) : null);
       })
       .catch(() => {
-        window.location.href = "/assess";
+        if (!hasSessionBackedAssessment) {
+          window.location.href = "/assess";
+        }
       });
   }, [id]);
 
@@ -187,6 +290,7 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
     });
     const data = await response.json();
     setChecklist(data);
+    setItemStatuses(Object.fromEntries((data.items ?? []).map((item: ChecklistItem) => [item.id, item.status])));
     setActiveTab("checklist");
     setLoadingChecklist(false);
   }
@@ -203,7 +307,20 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
     }).catch(() => undefined);
   }
 
-  if (!results) {
+  function updateSimulationField<K extends keyof AssessmentInput>(field: K, value: AssessmentInput[K]) {
+    setSimulationInput((current) => (current ? { ...current, [field]: value } : current));
+  }
+
+  function toggleSimulationValue(field: "target_markets" | "use_cases", value: string) {
+    setSimulationInput((current) => {
+      if (!current) return current;
+      const existing = current[field];
+      const next = existing.includes(value) ? existing.filter((item) => item !== value) : [...existing, value];
+      return { ...current, [field]: next };
+    });
+  }
+
+  if (!results || !input) {
     return (
       <main className="page">
         <div className="shell" style={{ paddingTop: "3rem" }}>
@@ -213,12 +330,34 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
     );
   }
 
-  const enriched = enrichAssessmentResults(results, input ?? undefined);
+  const enriched = enrichAssessmentResults(results, input);
+  const checklistItems = mapChecklistItems(checklist, itemStatuses);
+  const actionPlan = buildActionPlan(results);
   const applicable = enriched.filter((result) => result.applicability_status === "likely_applies");
   const mayApply = enriched.filter((result) => result.applicability_status === "may_apply");
   const unlikely = enriched.filter((result) => result.applicability_status === "unlikely");
-  const actionPlan = buildActionPlan(results);
-  const preset = getProductPresetById(input?.product_preset);
+  const preset = getProductPresetById(input.product_preset);
+  const deltaSummary = buildAssessmentDeltaSummary(results, previousResults);
+  const createdAtLabel = assessmentRecord?.createdAt
+    ? new Date(assessmentRecord.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : null;
+  const checklistCompleted = checklist ? checklist.items.filter((item) => (itemStatuses[item.id] ?? item.status) === "completed").length : 0;
+  const checklistPercent = checklist?.items.length ? Math.round((checklistCompleted / checklist.items.length) * 100) : 0;
+  const pendingChecklistCount = checklist ? checklist.items.length - checklistCompleted : 0;
+  const trustScorecard = buildTrustScorecard(enriched, checklistItems);
+  const clauseGapReport = buildClauseGapReport(results, checklistItems);
+  const driftTriggers = buildDriftTriggers({
+    createdAt: assessmentRecord?.createdAt ?? new Date().toISOString(),
+    results: enriched,
+    checklistItems,
+    changelogEntries: alerts.map((entry) => ({
+      lawSlug: entry.lawSlug,
+      changedAt: entry.changedAt,
+      summary: entry.summary,
+      lawShortTitle: entry.lawShortTitle,
+    })),
+  });
+  const simulationDelta = simulationInput ? buildSimulationDeltaFromResults(input, simulationInput, results) : null;
 
   return (
     <main className="page">
@@ -232,19 +371,22 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
               router.push("/assess");
             }}
           >
-            ← New assessment
+            Back to new assessment
           </button>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             <button className="button" style={{ fontSize: "0.85rem" }} onClick={() => exportResultsCsv(enriched, id)}>
-              ↓ Results CSV
+              Download results CSV
             </button>
+            <a href={`/api/assessments/${id}/evidence`} className="button" style={{ fontSize: "0.85rem", textDecoration: "none" }}>
+              Download evidence package
+            </a>
             <button
               className="button"
               style={{ fontSize: "0.85rem" }}
               onClick={() => exportActionPlanCsv(actionPlan.allActions, id)}
               disabled={actionPlan.allActions.length === 0}
             >
-              ↓ Action Plan CSV
+              Download action plan CSV
             </button>
             <a href={`/assess/results/${id}/print`} target="_blank" rel="noopener noreferrer" className="button" style={{ fontSize: "0.85rem", textDecoration: "none" }}>
               Export PDF
@@ -268,10 +410,26 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
           Your compliance analysis
         </h1>
         <p style={{ color: "var(--muted)", margin: "0 0 1.5rem" }}>
-          Top matches in plain English, plus the next actions a founder or small team can actually take.
+          Founder-readable results, clause-level gap tracking, trust posture, and drift signals in one working surface.
         </p>
 
-        <div className="stats-grid" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: "1.25rem" }}>
+        <div className="content-card" style={{ marginBottom: "1.25rem", padding: "1rem 1.1rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
+            <div>
+              <p style={{ margin: "0 0 0.25rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+                Founder summary mode
+              </p>
+              <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.92rem", maxWidth: "60ch" }}>
+                Switch to a tighter founder view when you want the shortest explanation of what matters now.
+              </p>
+            </div>
+            <button className={`button ${founderMode ? "button--primary" : ""}`} onClick={() => setFounderMode((current) => !current)}>
+              {founderMode ? "Founder mode on" : "Switch to founder mode"}
+            </button>
+          </div>
+        </div>
+
+        <div className="stats-grid" style={{ gridTemplateColumns: "repeat(5, 1fr)", marginBottom: "1.25rem" }}>
           <div className="stat-card">
             <strong style={{ color: "var(--red)" }}>{applicable.length}</strong>
             <span>Likely applies</span>
@@ -285,44 +443,138 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
             <span>Top urgent actions</span>
           </div>
           <div className="stat-card">
-            <strong style={{ color: "var(--green)" }}>{unlikely.length}</strong>
-            <span>Unlikely</span>
+            <strong style={{ color: toneColor(clauseGapReport.totals.gaps > 0 ? "gap" : "covered") }}>{clauseGapReport.totals.gaps}</strong>
+            <span>Open obligation gaps</span>
+          </div>
+          <div className="stat-card">
+            <strong style={{ color: trustScorecard.band === "green" ? "var(--green)" : trustScorecard.band === "amber" ? "#915a1e" : "var(--red)" }}>
+              {trustScorecard.overall}
+            </strong>
+            <span>Trust score</span>
           </div>
         </div>
 
-        <div className="content-card" style={{ marginBottom: "1.25rem" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
-            <div>
-              <p style={{ margin: 0, fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
-                Assessment snapshot
-              </p>
-              <h2 style={{ margin: "0.45rem 0 0.2rem", color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.35rem" }}>
-                {preset?.title ?? "Custom assessment"}
-              </h2>
-              <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>
-                {input?.target_markets?.length ? `Markets: ${input.target_markets.join(", ")}` : "Markets not specified"} ·{" "}
-                {input?.use_cases?.length ? `Use cases: ${input.use_cases.join(", ")}` : "Use cases not specified"}
-              </p>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.4fr) minmax(320px, 1fr)", gap: "1rem", marginBottom: "1.25rem" }}>
+          <div className="content-card">
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+              <div>
+                <p style={{ margin: 0, fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+                  Assessment snapshot
+                </p>
+                <h2 style={{ margin: "0.45rem 0 0.2rem", color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.35rem" }}>
+                  {preset?.title ?? "Custom assessment"}
+                </h2>
+                <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>
+                  {createdAtLabel ? `Run on ${createdAtLabel} · ` : ""}
+                  {input.target_markets.length ? `Markets: ${input.target_markets.join(", ")}` : "Markets not specified"} ·{" "}
+                  {input.use_cases.length ? `Use cases: ${input.use_cases.join(", ")}` : "Use cases not specified"}
+                </p>
+              </div>
+              <div style={{ minWidth: "260px", flex: 1 }}>
+                <p style={{ margin: "0 0 0.4rem", fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+                  Top 3 urgent actions
+                </p>
+                {actionPlan.topUrgentActions.length > 0 ? (
+                  <div className="stack">
+                    {actionPlan.topUrgentActions.map((action) => (
+                      <div key={action.id} style={{ display: "flex", alignItems: "center", gap: "0.6rem", fontSize: "0.9rem" }}>
+                        <span style={{ width: "1.25rem", fontWeight: 700, color: "var(--navy)" }}>•</span>
+                        <span style={{ color: "var(--navy)" }}>{action.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>No action items were generated from this assessment.</p>
+                )}
+              </div>
             </div>
-            <div style={{ minWidth: "260px", flex: 1 }}>
-              <p style={{ margin: "0 0 0.4rem", fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
-                Top 3 urgent actions
-              </p>
-              {actionPlan.topUrgentActions.length > 0 ? (
-                <div className="stack">
-                  {actionPlan.topUrgentActions.map((action) => (
-                    <div key={action.id} style={{ display: "flex", alignItems: "center", gap: "0.6rem", fontSize: "0.9rem" }}>
-                      <span style={{ width: "1.25rem", fontWeight: 700, color: "var(--navy)" }}>•</span>
-                      <span style={{ color: "var(--navy)" }}>{action.title}</span>
-                    </div>
-                  ))}
+          </div>
+
+          <div className="content-card">
+            <p style={{ margin: "0 0 0.25rem", fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+              Trust scorecard
+            </p>
+            <h2 style={{ margin: "0 0 0.35rem", color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.35rem" }}>
+              {trustScorecard.overall}/100 overall
+            </h2>
+            <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.92rem", lineHeight: 1.55 }}>
+              {trustScorecard.band === "green"
+                ? "Your evidence, execution, and source posture are in a strong state."
+                : trustScorecard.band === "amber"
+                  ? "You have a workable baseline, but some trust dimensions still need operating proof."
+                  : "This profile needs stronger evidence, tracking, and control coverage before external reliance."}
+            </p>
+            <div style={{ display: "grid", gap: "0.7rem", marginTop: "0.95rem" }}>
+              {trustScorecard.dimensions.map((dimension) => (
+                <div key={dimension.key}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", marginBottom: "0.25rem" }}>
+                    <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--navy)" }}>{dimension.label}</span>
+                    <span style={{ fontSize: "0.82rem", color: "var(--muted)" }}>{dimension.score}</span>
+                  </div>
+                  <div style={{ height: "8px", borderRadius: "999px", background: "rgba(16,32,48,0.08)", overflow: "hidden" }}>
+                    <div style={{ width: `${dimension.score}%`, height: "100%", background: dimension.score >= 80 ? "var(--green)" : dimension.score >= 60 ? "#f4a261" : "var(--red)" }} />
+                  </div>
                 </div>
-              ) : (
-                <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>No action items were generated from this assessment.</p>
-              )}
+              ))}
             </div>
           </div>
         </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1rem", marginBottom: "1.25rem" }}>
+          {deltaSummary ? (
+            <div className="content-card" style={{ padding: "1rem 1.1rem" }}>
+              <p style={{ margin: "0 0 0.25rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+                What changed since your last assessment
+              </p>
+              <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.94rem", lineHeight: 1.6 }}>{deltaSummary.summary}</p>
+            </div>
+          ) : null}
+          {checklist ? (
+            <div className="content-card" style={{ padding: "1rem 1.1rem" }}>
+              <p style={{ margin: "0 0 0.25rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+                Resume from where you left off
+              </p>
+              <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.94rem", lineHeight: 1.6 }}>
+                Your checklist is {checklistPercent}% complete. Continue the remaining {pendingChecklistCount} task{pendingChecklistCount === 1 ? "" : "s"}.
+              </p>
+              <button className="button" style={{ marginTop: "0.85rem" }} onClick={() => setActiveTab("checklist")}>
+                Open checklist
+              </button>
+            </div>
+          ) : null}
+          <div className="content-card" style={{ padding: "1rem 1.1rem" }}>
+            <p style={{ margin: "0 0 0.25rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+              Drift-triggered reassessment
+            </p>
+            <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.94rem", lineHeight: 1.6 }}>
+              {driftTriggers.length > 0
+                ? `${driftTriggers.length} trigger${driftTriggers.length === 1 ? "" : "s"} currently suggest this profile should be rerun or reviewed.`
+                : "No active drift triggers right now. This assessment is relatively stable."}
+            </p>
+            <button className="button" style={{ marginTop: "0.85rem" }} onClick={() => setActiveTab("simulate")}>
+              Run what-if simulation
+            </button>
+          </div>
+        </div>
+
+        {driftTriggers.length > 0 ? (
+          <div className="content-card" style={{ marginBottom: "1.25rem", padding: "1rem 1.15rem" }}>
+            <p style={{ margin: "0 0 0.5rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+              Drift engine
+            </p>
+            <div className="stack">
+              {driftTriggers.map((trigger) => (
+                <div key={`${trigger.title}-${trigger.reason}`} style={{ padding: "0.85rem 0.95rem", borderRadius: "14px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.3rem" }}>
+                    <Pill label={trigger.severity} color={trigger.severity === "high" ? "var(--red)" : trigger.severity === "medium" ? "#915a1e" : "var(--green)"} />
+                    <strong style={{ color: "var(--navy)" }}>{trigger.title}</strong>
+                  </div>
+                  <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>{trigger.reason}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="content-card" style={{ marginBottom: "1.25rem", padding: "1rem 1.15rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
@@ -336,17 +588,29 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
               </p>
             </div>
             <Link href="/methodology" className="button">
-              Read methodology →
+              Read methodology
             </Link>
+          </div>
+          <div style={{ marginTop: "0.9rem", paddingTop: "0.9rem", borderTop: "1px solid rgba(16,32,48,0.08)" }}>
+            <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.55 }}>
+              Need something you can hand to counsel, procurement, or a customer reviewer? Export the evidence package to capture matched laws,
+              clause coverage, actions, checklist state, sources, trust posture, drift triggers, and attestation metadata in one file.
+            </p>
           </div>
         </div>
 
-        <div className="subnav" style={{ marginBottom: "1.25rem" }}>
+        <div className="subnav" style={{ marginBottom: "1.25rem", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
           <button className={`button ${activeTab === "results" ? "button--primary" : ""}`} onClick={() => setActiveTab("results")}>
             Results ({enriched.length})
           </button>
           <button className={`button ${activeTab === "actions" ? "button--primary" : ""}`} onClick={() => setActiveTab("actions")}>
             Action Plan ({actionPlan.allActions.length})
+          </button>
+          <button className={`button ${activeTab === "gaps" ? "button--primary" : ""}`} onClick={() => setActiveTab("gaps")}>
+            Gap report ({clauseGapReport.totals.gaps + clauseGapReport.totals.notGenerated})
+          </button>
+          <button className={`button ${activeTab === "simulate" ? "button--primary" : ""}`} onClick={() => setActiveTab("simulate")}>
+            What-if simulator
           </button>
           <button
             className={`button ${activeTab === "checklist" ? "button--primary" : ""}`}
@@ -359,7 +623,7 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
             }}
             disabled={loadingChecklist}
           >
-            {loadingChecklist ? "Generating..." : checklist ? `Checklist (${checklist.items.length})` : "Generate Checklist"}
+            {loadingChecklist ? "Generating..." : checklist ? `Checklist (${checklist.items.length})` : "Generate checklist"}
           </button>
         </div>
 
@@ -368,6 +632,14 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
             {enriched.map((result) => {
               const config = STATUS_CONFIG[result.applicability_status];
               const law = getLawBySlug(result.law_slug);
+              const lawCoverage = clauseGapReport.entries.filter((entry) => entry.lawSlug === result.law_slug);
+              const lawCovered = lawCoverage.filter((entry) => entry.status === "covered").length;
+              const freshnessStyles =
+                result.freshnessTone === "fresh"
+                  ? { background: "rgba(42,123,98,0.12)", color: "var(--green)" }
+                  : result.freshnessTone === "aging"
+                    ? { background: "rgba(244,162,97,0.18)", color: "#915a1e" }
+                    : { background: "rgba(230,57,70,0.1)", color: "var(--red)" };
 
               return (
                 <div key={result.law_id} className="content-card">
@@ -378,19 +650,42 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
                         <span style={{ display: "inline-flex", padding: "0.25rem 0.65rem", borderRadius: "999px", fontSize: "0.78rem", fontWeight: 700, background: config.bg, color: config.color }}>
                           {config.label}
                         </span>
+                        <span style={{ display: "inline-flex", padding: "0.25rem 0.65rem", borderRadius: "999px", fontSize: "0.78rem", fontWeight: 700, ...freshnessStyles }}>
+                          Last reviewed {result.lastReviewed}
+                        </span>
+                        {lawCoverage.length > 0 ? (
+                          <span style={{ display: "inline-flex", padding: "0.25rem 0.65rem", borderRadius: "999px", fontSize: "0.78rem", fontWeight: 700, background: "rgba(16,32,48,0.06)", color: "var(--navy)" }}>
+                            Clause coverage {lawCovered}/{lawCoverage.length}
+                          </span>
+                        ) : null}
                       </div>
                       <h3 style={{ margin: "0.5rem 0 0.35rem", color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.25rem" }}>
                         {result.law_short_title}
                       </h3>
-                      <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.95rem", lineHeight: 1.6 }}>{result.plainSummary}</p>
+                      <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.95rem", lineHeight: 1.6 }}>
+                        {founderMode ? result.founderSummary : result.plainSummary}
+                      </p>
 
                       {result.applicability_status !== "unlikely" ? (
                         <>
                           <div style={{ display: "grid", gap: "0.7rem", marginTop: "1rem" }}>
+                            <ResultLabel title="Why this matters this week" body={result.whyThisMattersThisWeek} />
                             <ResultLabel title="Who this applies to" body={result.whoThisAppliesTo} />
-                            <ResultLabel title="Why you matched" body={result.whyYouMatched} />
-                            <ResultLabel title="What to do first" body={result.whatToDoFirst} />
+                            <ResultLabel title={founderMode ? "Why it matched" : "Why you matched"} body={result.whyYouMatched} />
+                            <ResultLabel title={founderMode ? "First move" : "What to do first"} body={result.whatToDoFirst} />
                           </div>
+                          <p style={{ margin: "0.8rem 0 0", color: "var(--muted)", fontSize: "0.84rem" }}>{result.freshnessLabel}</p>
+                          {lawCoverage.length > 0 ? (
+                            <div style={{ marginTop: "0.9rem", padding: "0.9rem", borderRadius: "14px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+                              <p style={{ margin: "0 0 0.35rem", fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)" }}>
+                                Clause-level gap view
+                              </p>
+                              <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.88rem" }}>
+                                {lawCovered} covered, {lawCoverage.filter((entry) => entry.status === "in_progress").length} in progress,{" "}
+                                {lawCoverage.filter((entry) => entry.status === "gap" || entry.status === "not_generated").length} still need tracking or evidence.
+                              </p>
+                            </div>
+                          ) : null}
                           <details style={{ marginTop: "1rem" }}>
                             <summary style={{ cursor: "pointer", color: "var(--navy)", fontWeight: 700 }}>Show legal details</summary>
                             <div style={{ marginTop: "0.75rem", color: "var(--muted)", fontSize: "0.9rem", lineHeight: 1.6 }}>
@@ -421,13 +716,16 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
 
                       <div style={{ marginTop: "0.9rem", display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
                         <Link href={`/laws/${result.law_slug}`} className="button" style={{ fontSize: "0.85rem", padding: "0.45rem 0.85rem" }}>
-                          View law →
+                          View law
                         </Link>
                         {law?.official_url ? (
                           <a href={law.official_url} target="_blank" rel="noopener noreferrer" className="button" style={{ fontSize: "0.85rem", padding: "0.45rem 0.85rem", textDecoration: "none" }}>
                             Official source
                           </a>
                         ) : null}
+                        <button className="button" style={{ fontSize: "0.85rem", padding: "0.45rem 0.85rem" }} onClick={() => router.push("/assess")}>
+                          Reassess this profile
+                        </button>
                       </div>
                     </div>
                     <div style={{ textAlign: "right", minWidth: "60px" }}>
@@ -445,7 +743,7 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
               <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
                 <div>
                   <p style={{ margin: "0 0 0.35rem", fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
-                    Template Library
+                    Template library
                   </p>
                   <h3 style={{ margin: 0, color: "var(--navy)", fontFamily: "var(--font-heading)" }}>Download starter templates for your team</h3>
                   <p style={{ margin: "0.35rem 0 0", color: "var(--muted)", fontSize: "0.9rem" }}>
@@ -453,7 +751,7 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
                   </p>
                 </div>
                 <Link href="/templates" className="button button--primary">
-                  Open templates →
+                  Open templates
                 </Link>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.75rem", marginTop: "1rem" }}>
@@ -461,6 +759,7 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
                   <div key={template.slug} style={{ padding: "0.9rem", borderRadius: "14px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.08)" }}>
                     <strong style={{ color: "var(--navy)" }}>{template.title}</strong>
                     <p style={{ margin: "0.35rem 0 0", color: "var(--muted)", fontSize: "0.85rem" }}>{template.useCase}</p>
+                    <p style={{ margin: "0.45rem 0 0", color: "var(--muted)", fontSize: "0.78rem" }}>Last reviewed {template.lastReviewed}</p>
                   </div>
                 ))}
               </div>
@@ -469,6 +768,10 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
         ) : null}
 
         {activeTab === "actions" ? <ActionPlanView actions={actionPlan.allActions} /> : null}
+        {activeTab === "gaps" ? <GapReportView report={clauseGapReport} /> : null}
+        {activeTab === "simulate" ? (
+          <SimulationView input={simulationInput} delta={simulationDelta} onChangeField={updateSimulationField} onToggleValue={toggleSimulationValue} />
+        ) : null}
         {activeTab === "checklist" && checklist ? (
           <ChecklistView checklist={checklist} itemStatuses={itemStatuses} onUpdateStatus={updateItemStatus} />
         ) : null}
@@ -543,6 +846,198 @@ function ActionPlanView({ actions }: { actions: ActionPlanItem[] }) {
   );
 }
 
+function GapReportView({ report }: { report: ReturnType<typeof buildClauseGapReport> }) {
+  return (
+    <div className="stack">
+      <div className="content-card">
+        <p style={{ margin: "0 0 0.35rem", fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+          Clause-level coverage summary
+        </p>
+        <h2 style={{ margin: 0, color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.35rem" }}>Gap report</h2>
+        <p style={{ margin: "0.45rem 0 0", color: "var(--muted)", lineHeight: 1.6 }}>{report.summary}</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.75rem", marginTop: "1rem" }}>
+          <MiniMetric label="Covered" value={report.totals.covered} color="var(--green)" />
+          <MiniMetric label="In progress" value={report.totals.inProgress} color="#915a1e" />
+          <MiniMetric label="Open gaps" value={report.totals.gaps} color="var(--red)" />
+          <MiniMetric label="Not tracked" value={report.totals.notGenerated} color="#2b6cb0" />
+        </div>
+      </div>
+
+      {report.entries.length === 0 ? (
+        <div className="content-card" style={{ textAlign: "center", padding: "2.5rem", color: "var(--muted)" }}>
+          <p>No clause-level obligations were generated for this assessment.</p>
+        </div>
+      ) : (
+        report.entries.map((entry) => (
+          <div key={`${entry.lawSlug}-${entry.obligationTitle}-${entry.citation}`} className="content-card" style={{ padding: "1rem 1.1rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "flex-start", flexWrap: "wrap" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.35rem" }}>
+                  <Pill label={entry.status.replace("_", " ")} color={toneColor(entry.status)} />
+                  <Pill label={entry.priority} color={PRIORITY_COLORS[entry.priority] ?? "var(--navy)"} />
+                  <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{entry.lawShortTitle}</span>
+                  <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{entry.category}</span>
+                </div>
+                <strong style={{ color: "var(--navy)" }}>{entry.obligationTitle}</strong>
+                <p style={{ margin: "0.4rem 0 0", color: "var(--muted)", fontSize: "0.9rem", lineHeight: 1.55 }}>{entry.whyItMatters}</p>
+              </div>
+              <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{entry.citation}</span>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function SimulationView({
+  input,
+  delta,
+  onChangeField,
+  onToggleValue,
+}: {
+  input: AssessmentInput | null;
+  delta: ReturnType<typeof buildSimulationDeltaFromResults> | null;
+  onChangeField: <K extends keyof AssessmentInput>(field: K, value: AssessmentInput[K]) => void;
+  onToggleValue: (field: "target_markets" | "use_cases", value: string) => void;
+}) {
+  if (!input || !delta) {
+    return (
+      <div className="content-card" style={{ textAlign: "center", padding: "2.5rem", color: "var(--muted)" }}>
+        <p>Simulation is not available yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.1fr) minmax(320px, 0.9fr)", gap: "1rem" }}>
+      <div className="content-card">
+        <p style={{ margin: "0 0 0.35rem", fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+          What-if simulation
+        </p>
+        <h2 style={{ margin: 0, color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.35rem" }}>Model a product change</h2>
+        <p style={{ margin: "0.45rem 0 1rem", color: "var(--muted)", lineHeight: 1.6 }}>
+          Simulate market expansion, use-case changes, or higher automation to see how legal scope shifts before you launch it.
+        </p>
+
+        <div style={{ display: "grid", gap: "1rem" }}>
+          <div>
+            <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, color: "var(--navy)", marginBottom: "0.5rem" }}>Target markets</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+              {TARGET_MARKETS.map((market) => (
+                <button
+                  key={market.code}
+                  type="button"
+                  className={`button ${input.target_markets.includes(market.code) ? "button--primary" : ""}`}
+                  style={{ fontSize: "0.8rem" }}
+                  onClick={() => onToggleValue("target_markets", market.code)}
+                >
+                  {market.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, color: "var(--navy)", marginBottom: "0.5rem" }}>Use cases</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+              {USE_CASE_OPTIONS.map((useCase) => (
+                <button
+                  key={useCase.value}
+                  type="button"
+                  className={`button ${input.use_cases.includes(useCase.value) ? "button--primary" : ""}`}
+                  style={{ fontSize: "0.8rem" }}
+                  onClick={() => onToggleValue("use_cases", useCase.value)}
+                >
+                  {useCase.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.75rem" }}>
+            <label style={{ display: "grid", gap: "0.35rem" }}>
+              <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--navy)" }}>Deployment</span>
+              <select value={input.deployment_context} onChange={(event) => onChangeField("deployment_context", event.target.value)}>
+                <option value="public">Public (B2C)</option>
+                <option value="enterprise">Enterprise (B2B)</option>
+                <option value="consumer">Consumer App</option>
+                <option value="government">Government / Public Sector</option>
+              </select>
+            </label>
+            <label style={{ display: "grid", gap: "0.35rem" }}>
+              <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--navy)" }}>Risk self-assessment</span>
+              <select value={input.risk_self_assessment ?? "limited"} onChange={(event) => onChangeField("risk_self_assessment", event.target.value)}>
+                <option value="minimal">Minimal risk</option>
+                <option value="limited">Limited risk</option>
+                <option value="high">High risk</option>
+                <option value="unacceptable">Potentially unacceptable risk</option>
+              </select>
+            </label>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.75rem" }}>
+            <BooleanToggle label="Automated decisions" value={input.automated_decisions} onChange={(value) => onChangeField("automated_decisions", value)} />
+            <BooleanToggle label="Processes EU personal data" value={input.processes_eu_personal_data} onChange={(value) => onChangeField("processes_eu_personal_data", value)} />
+            <BooleanToggle label="Uses biometric data" value={input.uses_biometric_data} onChange={(value) => onChangeField("uses_biometric_data", value)} />
+          </div>
+        </div>
+      </div>
+
+      <div className="stack">
+        <div className="content-card">
+          <p style={{ margin: "0 0 0.35rem", fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+            Simulation delta
+          </p>
+          <h2 style={{ margin: 0, color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.35rem" }}>Scope change</h2>
+          <p style={{ margin: "0.45rem 0 0", color: "var(--muted)", lineHeight: 1.6 }}>{delta.summary}</p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "0.75rem", marginTop: "1rem" }}>
+            <MiniMetric label="Current likely laws" value={delta.currentLikely} color="var(--navy)" />
+            <MiniMetric label="Candidate likely laws" value={delta.candidateLikely} color={delta.candidateLikely > delta.currentLikely ? "var(--red)" : "var(--green)"} />
+          </div>
+        </div>
+
+        <div className="content-card">
+          <p style={{ margin: "0 0 0.45rem", fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+            New likely-applicable laws
+          </p>
+          {delta.newLikelyApplies.length > 0 ? (
+            <div className="stack">
+              {delta.newLikelyApplies.map((law) => (
+                <div key={law.lawSlug} style={{ padding: "0.8rem 0.9rem", borderRadius: "12px", background: "rgba(230,57,70,0.08)", border: "1px solid rgba(230,57,70,0.15)" }}>
+                  <strong style={{ color: "var(--navy)" }}>{law.lawShortTitle}</strong>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ margin: 0, color: "var(--muted)" }}>No new likely-applicable laws would be introduced.</p>
+          )}
+        </div>
+
+        <div className="content-card">
+          <p style={{ margin: "0 0 0.45rem", fontSize: "0.82rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+            Status changes
+          </p>
+          {delta.changedStatuses.length > 0 ? (
+            <div className="stack">
+              {delta.changedStatuses.slice(0, 6).map((entry) => (
+                <div key={entry.lawSlug} style={{ padding: "0.8rem 0.9rem", borderRadius: "12px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+                  <strong style={{ color: "var(--navy)" }}>{entry.lawShortTitle}</strong>
+                  <p style={{ margin: "0.25rem 0 0", color: "var(--muted)", fontSize: "0.88rem" }}>
+                    {entry.from} to {entry.to}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ margin: 0, color: "var(--muted)" }}>No law status changes in this scenario.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Pill({ label, color }: { label: string; color?: string }) {
   return (
     <span
@@ -559,6 +1054,31 @@ function Pill({ label, color }: { label: string; color?: string }) {
     >
       {label}
     </span>
+  );
+}
+
+function MiniMetric({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div style={{ padding: "0.9rem", borderRadius: "14px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+      <strong style={{ display: "block", color: color, fontFamily: "var(--font-heading)", fontSize: "1.5rem", lineHeight: 1 }}>{value}</strong>
+      <span style={{ color: "var(--muted)", fontSize: "0.84rem" }}>{label}</span>
+    </div>
+  );
+}
+
+function BooleanToggle({ label, value, onChange }: { label: string; value: boolean; onChange: (value: boolean) => void }) {
+  return (
+    <div style={{ padding: "0.85rem 0.95rem", borderRadius: "14px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+      <p style={{ margin: "0 0 0.5rem", fontSize: "0.82rem", fontWeight: 700, color: "var(--navy)" }}>{label}</p>
+      <div style={{ display: "flex", gap: "0.5rem" }}>
+        <button type="button" className={`button ${value ? "button--primary" : ""}`} style={{ fontSize: "0.8rem" }} onClick={() => onChange(true)}>
+          Yes
+        </button>
+        <button type="button" className={`button ${!value ? "button--primary" : ""}`} style={{ fontSize: "0.8rem" }} onClick={() => onChange(false)}>
+          No
+        </button>
+      </div>
+    </div>
   );
 }
 

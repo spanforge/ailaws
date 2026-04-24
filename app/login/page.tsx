@@ -33,8 +33,8 @@ export default function LoginPage() {
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-brand">
-          <span className="auth-logo">LexForge</span>
-          <p className="auth-tagline">AI Compliance Intelligence</p>
+          <span className="auth-logo">Spanforge Compass</span>
+          <p className="auth-tagline">AI Compliance Evidence Workspace</p>
         </div>
 
         <h1 className="auth-heading">Sign in to your account</h1>

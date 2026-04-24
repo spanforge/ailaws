@@ -15,7 +15,7 @@ export async function GET(
   return new NextResponse(template.body, {
     status: 200,
     headers: {
-      "Content-Type": "text/markdown; charset=utf-8",
+      "Content-Type": "text/html; charset=utf-8",
       "Content-Disposition": `attachment; filename="${template.fileName}"`,
     },
   });

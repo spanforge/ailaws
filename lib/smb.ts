@@ -194,12 +194,25 @@ export type PlainEnglishLawResult = AssessmentResult & {
   whyYouMatched: string;
   whatToDoFirst: string;
   legalDetails: string;
+  whyThisMattersThisWeek: string;
+  founderSummary: string;
+  lastReviewed: string;
+  freshnessLabel: string;
+  freshnessTone: "fresh" | "aging" | "stale";
+  sourceUrl?: string;
 };
 
 export type PenaltySnapshot = {
   lawSlug: string;
   lawShortTitle: string;
   summary: string;
+};
+
+export type AssessmentDeltaSummary = {
+  summary: string;
+  newLikelyApplies: string[];
+  newlyDowngraded: string[];
+  unchangedTopMatches: string[];
 };
 
 const ACTION_TIMELINE_LABELS: Record<ActionTimeline, string> = {
@@ -240,6 +253,13 @@ const PENALTY_SNAPSHOTS: Record<string, string> = {
   "nyc-local-law-144": "Can create enforcement and reputational exposure if required bias-audit and notice steps are missed.",
 };
 
+const LAW_REVIEW_OVERRIDES: Record<string, string> = {
+  "eu-ai-act": "2026-04-23",
+  "colorado-ai-act": "2026-04-21",
+  "eu-cyber-resilience-act": "2026-04-22",
+  "iso-iec-42001": "2026-04-18",
+};
+
 function truncateWords(text: string, maxWords: number): string {
   const words = text.trim().split(/\s+/);
   if (words.length <= maxWords) return text.trim();
@@ -262,6 +282,42 @@ function mapTriggeredRules(result: AssessmentResult): string {
   return `You matched because the assessment flagged ${result.triggered_rules.join(", ").toLowerCase()}.`;
 }
 
+function formatDisplayDate(value: string): string {
+  return new Date(`${value}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function diffInDays(dateString: string): number {
+  const target = new Date(`${dateString}T00:00:00Z`).getTime();
+  const now = new Date().getTime();
+  return Math.max(0, Math.floor((now - target) / (1000 * 60 * 60 * 24)));
+}
+
+export function getLawLastReviewed(lawSlug: string): string {
+  const law = getLawBySlug(lawSlug);
+  const fallback =
+    law?.status === "in_force" || law?.status === "enacted" ? "2026-04-23" : "2026-04-18";
+  return LAW_REVIEW_OVERRIDES[lawSlug] ?? fallback;
+}
+
+export function getFreshnessTone(reviewDate: string): "fresh" | "aging" | "stale" {
+  const days = diffInDays(reviewDate);
+  if (days <= 45) return "fresh";
+  if (days <= 120) return "aging";
+  return "stale";
+}
+
+export function getFreshnessLabel(reviewDate: string): string {
+  const tone = getFreshnessTone(reviewDate);
+  if (tone === "fresh") return `Reviewed recently on ${formatDisplayDate(reviewDate)}`;
+  if (tone === "aging") return `Review is aging from ${formatDisplayDate(reviewDate)}`;
+  return `Needs refresh. Last reviewed ${formatDisplayDate(reviewDate)}`;
+}
+
 function summarizeLaw(result: AssessmentResult, input?: AssessmentInput): string {
   const law = getLawBySlug(result.law_slug);
   const productLabel = PRODUCT_TYPE_LABELS[input?.product_type ?? "other"] ?? "AI product";
@@ -274,6 +330,38 @@ function summarizeLaw(result: AssessmentResult, input?: AssessmentInput): string
     : `${result.law_short_title} matters if you are ${marketHint} with an ${productLabel}.`;
 
   return truncateWords(base, 26);
+}
+
+function buildWhyThisMattersThisWeek(result: AssessmentResult, input?: AssessmentInput): string {
+  const law = getLawBySlug(result.law_slug);
+  const marketSignal = input?.target_markets?.length
+    ? `because you are targeting ${input.target_markets.join(", ")}`
+    : "because your current product profile matches its scope";
+  const firstAction = buildWhatToDoFirst(result);
+
+  if (result.applicability_status === "likely_applies") {
+    return `${result.law_short_title} is worth acting on this week ${marketSignal}. Start by making one owner accountable for: ${firstAction}`;
+  }
+
+  if (result.applicability_status === "may_apply") {
+    return `${result.law_short_title} is a near-term watch item ${marketSignal}. Clarify scope now so you do not discover a blocker late in launch or expansion.`;
+  }
+
+  return `${law?.short_title ?? result.law_short_title} is not a current priority, but keep it on your watchlist if your markets, use case, or decision flows change.`;
+}
+
+function buildFounderSummary(result: AssessmentResult, input?: AssessmentInput): string {
+  const useCaseSummary = input?.use_cases?.length ? formatUseCases(input.use_cases) : "your current AI workflow";
+
+  if (result.applicability_status === "likely_applies") {
+    return `This likely affects ${useCaseSummary}. Put an owner on it and handle the first requirement before the next product or market change.`;
+  }
+
+  if (result.applicability_status === "may_apply") {
+    return `This could matter if ${useCaseSummary} becomes more automated or expands into a regulated market.`;
+  }
+
+  return `Low priority for now based on this product profile.`;
 }
 
 function buildWhoThisAppliesTo(result: AssessmentResult, input?: AssessmentInput): string {
@@ -354,6 +442,12 @@ export function enrichAssessmentResults(
     whyYouMatched: mapTriggeredRules(result),
     whatToDoFirst: buildWhatToDoFirst(result),
     legalDetails: buildLegalDetails(result),
+    whyThisMattersThisWeek: buildWhyThisMattersThisWeek(result, input),
+    founderSummary: buildFounderSummary(result, input),
+    lastReviewed: getLawLastReviewed(result.law_slug),
+    freshnessLabel: getFreshnessLabel(getLawLastReviewed(result.law_slug)),
+    freshnessTone: getFreshnessTone(getLawLastReviewed(result.law_slug)),
+    sourceUrl: getLawBySlug(result.law_slug)?.official_url,
   }));
 }
 
@@ -453,7 +547,58 @@ export function buildKeySources(results: AssessmentResult[]): Array<{ title: str
     .slice(0, 5)
     .map((result) => getLawBySlug(result.law_slug))
     .filter((law): law is Law => Boolean(law?.official_url))
-    .map((law) => ({ title: law.short_title, url: law.official_url }));
+    .map((law) => ({ title: `${law.short_title} (reviewed ${formatDisplayDate(getLawLastReviewed(law.slug))})`, url: law.official_url }));
+}
+
+export function buildAssessmentDeltaSummary(
+  currentResults: AssessmentResult[],
+  previousResults?: AssessmentResult[] | null,
+): AssessmentDeltaSummary | null {
+  if (!previousResults || previousResults.length === 0) return null;
+
+  const previousBySlug = new Map(previousResults.map((result) => [result.law_slug, result]));
+  const currentLikely = currentResults.filter((result) => result.applicability_status === "likely_applies");
+  const previousLikely = previousResults.filter((result) => result.applicability_status === "likely_applies");
+
+  const newLikelyApplies = currentLikely
+    .filter((result) => previousBySlug.get(result.law_slug)?.applicability_status !== "likely_applies")
+    .slice(0, 3)
+    .map((result) => result.law_short_title);
+
+  const newlyDowngraded = previousLikely
+    .filter((result) => previousBySlug.has(result.law_slug))
+    .filter((result) => {
+      const current = currentResults.find((entry) => entry.law_slug === result.law_slug);
+      return current && current.applicability_status !== "likely_applies";
+    })
+    .slice(0, 3)
+    .map((result) => result.law_short_title);
+
+  const unchangedTopMatches = currentLikely
+    .filter((result) => previousBySlug.get(result.law_slug)?.applicability_status === "likely_applies")
+    .slice(0, 3)
+    .map((result) => result.law_short_title);
+
+  const summaryParts: string[] = [];
+  if (newLikelyApplies.length > 0) {
+    summaryParts.push(`New likely matches: ${newLikelyApplies.join(", ")}`);
+  }
+  if (newlyDowngraded.length > 0) {
+    summaryParts.push(`Reduced priority: ${newlyDowngraded.join(", ")}`);
+  }
+  if (summaryParts.length === 0 && unchangedTopMatches.length > 0) {
+    summaryParts.push(`No major scope shift. Core matches still include ${unchangedTopMatches.join(", ")}`);
+  }
+  if (summaryParts.length === 0) {
+    summaryParts.push("No major scope shift since the last assessment.");
+  }
+
+  return {
+    summary: summaryParts.join(". "),
+    newLikelyApplies,
+    newlyDowngraded,
+    unchangedTopMatches,
+  };
 }
 
 export type TemplateEntry = {
@@ -464,8 +609,192 @@ export type TemplateEntry = {
   lastReviewed: string;
   disclaimer: string;
   fileName: string;
+  formatLabel: string;
   body: string;
 };
+
+function renderTemplateDocument(params: {
+  title: string;
+  subtitle: string;
+  lastReviewed: string;
+  disclaimer: string;
+  sections: Array<{ heading: string; content: string }>;
+}): string {
+  const sectionMarkup = params.sections
+    .map(
+      (section) => `
+        <section class="section">
+          <h2>${section.heading}</h2>
+          ${section.content}
+        </section>
+      `,
+    )
+    .join("");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${params.title}</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #102030;
+        --muted: #5a6877;
+        --line: #d8e0e8;
+        --panel: #f6f8fb;
+        --accent: #d97706;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Arial, sans-serif;
+        color: var(--ink);
+        background: #eef3f8;
+        line-height: 1.55;
+      }
+      .page {
+        max-width: 960px;
+        margin: 32px auto;
+        background: #fff;
+        border: 1px solid var(--line);
+        box-shadow: 0 12px 36px rgba(16, 32, 48, 0.08);
+      }
+      .header {
+        padding: 36px 40px 28px;
+        border-bottom: 1px solid var(--line);
+        background: linear-gradient(135deg, #fffaf0 0%, #ffffff 55%, #f7fbff 100%);
+      }
+      .eyebrow {
+        margin: 0 0 10px;
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      h1 {
+        margin: 0 0 10px;
+        font-size: 34px;
+        line-height: 1.1;
+      }
+      .subtitle {
+        margin: 0;
+        color: var(--muted);
+        font-size: 16px;
+        max-width: 72ch;
+      }
+      .meta {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+        padding: 20px 40px;
+        border-bottom: 1px solid var(--line);
+        background: var(--panel);
+      }
+      .meta-card {
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        background: #fff;
+      }
+      .meta-label {
+        margin: 0 0 4px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .meta-value {
+        margin: 0;
+        font-size: 14px;
+      }
+      .content {
+        padding: 32px 40px 40px;
+      }
+      .section + .section {
+        margin-top: 28px;
+      }
+      h2 {
+        margin: 0 0 10px;
+        font-size: 20px;
+        line-height: 1.2;
+      }
+      p {
+        margin: 0 0 12px;
+      }
+      ul, ol {
+        margin: 0 0 12px 20px;
+        padding: 0;
+      }
+      li + li {
+        margin-top: 6px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 12px;
+      }
+      th, td {
+        border: 1px solid var(--line);
+        padding: 10px 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: var(--panel);
+        font-size: 13px;
+      }
+      .placeholder {
+        color: var(--muted);
+        font-style: italic;
+      }
+      .footnote {
+        margin-top: 28px;
+        padding: 16px 18px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--muted);
+        font-size: 13px;
+      }
+      @media print {
+        body {
+          background: #fff;
+        }
+        .page {
+          margin: 0;
+          box-shadow: none;
+          border: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="header">
+        <p class="eyebrow">Spanforge Compass Template Library</p>
+        <h1>${params.title}</h1>
+        <p class="subtitle">${params.subtitle}</p>
+      </header>
+      <section class="meta">
+        <div class="meta-card">
+          <p class="meta-label">Last reviewed</p>
+          <p class="meta-value">${params.lastReviewed}</p>
+        </div>
+        <div class="meta-card">
+          <p class="meta-label">Format</p>
+          <p class="meta-value">Editable HTML document compatible with browsers, Word, and Google Docs</p>
+        </div>
+      </section>
+      <div class="content">
+        ${sectionMarkup}
+        <div class="footnote">${params.disclaimer}</div>
+      </div>
+    </main>
+  </body>
+</html>`;
+}
 
 export const TEMPLATE_LIBRARY: TemplateEntry[] = [
   {
@@ -475,33 +804,94 @@ export const TEMPLATE_LIBRARY: TemplateEntry[] = [
     useCase: "Set baseline internal rules for approved AI use, data handling, and review expectations.",
     lastReviewed: "2026-04-23",
     disclaimer: "Template for operational planning only. Adapt with counsel before relying on it as legal advice.",
-    fileName: "lexforge-ai-usage-policy.md",
-    body: `# AI Usage Policy
-
-## Purpose
-Set baseline rules for how the company uses AI systems safely and responsibly.
-
-## Scope
-Applies to employees, contractors, and approved vendors using AI tools for company work.
-
-## Allowed Uses
-- Drafting, summarization, translation, coding assistance, and internal knowledge support.
-- Customer-facing use only when product and legal owners approve the workflow.
-
-## Restricted Uses
-- Uploading confidential customer data into unapproved AI tools.
-- Fully automated high-impact decisions in hiring, credit, healthcare, housing, insurance, or similar domains without review.
-- Generating deceptive, discriminatory, or unlawful content.
-
-## Required Controls
-- Maintain an inventory of approved AI tools and owners.
-- Label AI-generated customer-facing content where required.
-- Require human review for consequential outputs.
-- Escalate incidents, bias concerns, and security issues within one business day.
-
-## Review
-Review this policy quarterly and after major model or workflow changes.
-`,
+    fileName: "spanforge-compass-ai-usage-policy.html",
+    formatLabel: "Editable HTML",
+    body: renderTemplateDocument({
+      title: "AI Usage Policy",
+      subtitle: "Internal baseline policy for approved AI use, restricted activities, oversight, and accountability.",
+      lastReviewed: "2026-04-23",
+      disclaimer: "This template is for operational planning only. Adapt it to your actual tooling, data flows, employment policies, and legal obligations before rollout.",
+      sections: [
+        {
+          heading: "1. Document control",
+          content: `
+            <table>
+              <tr><th>Company</th><td class="placeholder">[Company name]</td></tr>
+              <tr><th>Policy owner</th><td class="placeholder">[Role / team]</td></tr>
+              <tr><th>Approved by</th><td class="placeholder">[Executive / committee]</td></tr>
+              <tr><th>Effective date</th><td class="placeholder">[Date]</td></tr>
+              <tr><th>Review cadence</th><td>Quarterly and after material model, vendor, or workflow changes</td></tr>
+            </table>
+          `,
+        },
+        {
+          heading: "2. Purpose and scope",
+          content: `
+            <p>This policy sets the baseline rules for how employees, contractors, and approved service providers may use AI systems in company work.</p>
+            <p>It applies to:</p>
+            <ul>
+              <li>Internal copilots, drafting tools, code assistants, analytics tools, and customer-facing AI features.</li>
+              <li>Any workflow where an AI system generates content, recommendations, classifications, or decisions used by the company.</li>
+              <li>Third-party tools and vendor-hosted models used with company, customer, employee, or prospect data.</li>
+            </ul>
+          `,
+        },
+        {
+          heading: "3. Approved and prohibited uses",
+          content: `
+            <p><strong>Approved uses</strong></p>
+            <ul>
+              <li>Drafting, summarization, translation, coding assistance, support triage, and internal knowledge search.</li>
+              <li>Customer-facing assistance only where the workflow has an owner, documented purpose, testing evidence, and required notices.</li>
+              <li>Experimentation in sandbox or test environments approved by engineering or security.</li>
+            </ul>
+            <p><strong>Prohibited uses</strong></p>
+            <ul>
+              <li>Uploading confidential customer data, source code, secrets, regulated records, or personal data into unapproved tools.</li>
+              <li>Using AI as the sole decision-maker for hiring, credit, housing, healthcare, insurance, education, law enforcement, or other high-impact domains.</li>
+              <li>Generating deceptive, discriminatory, harassing, unlawful, or misleading content.</li>
+              <li>Removing required human review, escalation, or audit steps from an approved workflow.</li>
+            </ul>
+          `,
+        },
+        {
+          heading: "4. Mandatory control requirements",
+          content: `
+            <table>
+              <tr><th>Control area</th><th>Minimum requirement</th></tr>
+              <tr><td>Tool approval</td><td>Maintain an inventory of approved AI tools, owners, business purpose, and data-use limits.</td></tr>
+              <tr><td>Data handling</td><td>Use only approved data classes. Follow retention, redaction, and access rules before submitting data.</td></tr>
+              <tr><td>Human oversight</td><td>Require human review for consequential outputs, customer commitments, policy actions, and sensitive communications.</td></tr>
+              <tr><td>Testing</td><td>Document accuracy, failure modes, bias checks, and escalation criteria before production use.</td></tr>
+              <tr><td>Transparency</td><td>Label AI-generated or AI-assisted customer-facing content where required by law, policy, or contract.</td></tr>
+              <tr><td>Incident response</td><td>Escalate security issues, harmful outputs, bias concerns, and policy violations within one business day.</td></tr>
+              <tr><td>Change management</td><td>Review model, prompt, vendor, threshold, and data-source changes before release.</td></tr>
+            </table>
+          `,
+        },
+        {
+          heading: "5. Roles and responsibilities",
+          content: `
+            <ul>
+              <li><strong>Policy owner:</strong> Maintains this policy, training materials, and exception log.</li>
+              <li><strong>Team managers:</strong> Ensure only approved tools and workflows are used by their teams.</li>
+              <li><strong>Engineering / security:</strong> Review technical controls, logging, retention, and incident handling.</li>
+              <li><strong>Product / operations:</strong> Maintain workflow descriptions, human-review steps, and customer-facing notices.</li>
+              <li><strong>All users:</strong> Use AI responsibly, follow this policy, and report issues promptly.</li>
+            </ul>
+          `,
+        },
+        {
+          heading: "6. Exceptions, training, and attestation",
+          content: `
+            <p>Any exception to this policy must be documented, approved, time-bounded, and reviewed before renewal.</p>
+            <p class="placeholder">Exception owner: [Name / role]</p>
+            <p class="placeholder">Required training completion method: [LMS / handbook / signed acknowledgement]</p>
+            <p>Employees using approved AI tools must confirm that they have read this policy and understand the company escalation path for incidents and misuse.</p>
+          `,
+        },
+      ],
+    }),
   },
   {
     slug: "vendor-diligence-checklist",
@@ -510,18 +900,81 @@ Review this policy quarterly and after major model or workflow changes.
     useCase: "Review external AI vendors before procurement or renewal.",
     lastReviewed: "2026-04-23",
     disclaimer: "Template for diligence support only. It does not replace legal, security, or procurement review.",
-    fileName: "lexforge-vendor-diligence-checklist.md",
-    body: `# Vendor Diligence Checklist
-
-- Identify the vendor, product name, and business owner.
-- Confirm where data is processed and stored.
-- Ask whether the vendor uses sub-processors or third-party models.
-- Request security documentation, incident process, and retention terms.
-- Confirm model-update notice commitments.
-- Review bias, testing, and human-oversight controls.
-- Confirm rights to audit, terminate, and export data.
-- Record decision, approver, and renewal date.
-`,
+    fileName: "spanforge-compass-vendor-diligence-checklist.html",
+    formatLabel: "Editable HTML",
+    body: renderTemplateDocument({
+      title: "Vendor Diligence Checklist",
+      subtitle: "Procurement and renewal checklist for third-party AI vendors, model providers, and AI-enabled SaaS tools.",
+      lastReviewed: "2026-04-23",
+      disclaimer: "Use this checklist to structure diligence and capture evidence. It does not replace legal review, security review, procurement controls, or negotiated contract terms.",
+      sections: [
+        {
+          heading: "1. Vendor profile",
+          content: `
+            <table>
+              <tr><th>Vendor legal name</th><td class="placeholder">[Vendor legal entity]</td></tr>
+              <tr><th>Product / service</th><td class="placeholder">[Product name]</td></tr>
+              <tr><th>Internal business owner</th><td class="placeholder">[Name / team]</td></tr>
+              <tr><th>Use case</th><td class="placeholder">[What the tool will do]</td></tr>
+              <tr><th>Customer-facing or internal</th><td class="placeholder">[Internal / customer-facing / both]</td></tr>
+              <tr><th>Target launch / renewal date</th><td class="placeholder">[Date]</td></tr>
+            </table>
+          `,
+        },
+        {
+          heading: "2. Data, privacy, and residency",
+          content: `
+            <ul>
+              <li>Confirm what data categories the vendor will receive, generate, store, or derive.</li>
+              <li>Document whether personal data, confidential business data, regulated records, or customer content are involved.</li>
+              <li>Confirm where data is processed and stored, including cross-border transfers.</li>
+              <li>Identify sub-processors, upstream model providers, and hosted infrastructure dependencies.</li>
+              <li>Confirm retention periods, deletion timelines, and customer data export options.</li>
+            </ul>
+            <p class="placeholder">Notes / restrictions: [Insert approved data classes and prohibited data classes]</p>
+          `,
+        },
+        {
+          heading: "3. Security and operational controls",
+          content: `
+            <table>
+              <tr><th>Question</th><th>Response / evidence</th><th>Status</th></tr>
+              <tr><td>Security program and certifications available?</td><td class="placeholder">[SOC 2, ISO 27001, pen test, etc.]</td><td class="placeholder">[Pass / gap]</td></tr>
+              <tr><td>Authentication, access control, and admin logging supported?</td><td class="placeholder">[Details]</td><td class="placeholder">[Pass / gap]</td></tr>
+              <tr><td>Incident notification timeline contractually defined?</td><td class="placeholder">[Hours / days]</td><td class="placeholder">[Pass / gap]</td></tr>
+              <tr><td>Business continuity and disaster recovery documented?</td><td class="placeholder">[Details]</td><td class="placeholder">[Pass / gap]</td></tr>
+              <tr><td>Model or service change notices committed?</td><td class="placeholder">[Release notes / advance notice]</td><td class="placeholder">[Pass / gap]</td></tr>
+            </table>
+          `,
+        },
+        {
+          heading: "4. AI governance and product risk",
+          content: `
+            <ul>
+              <li>Ask how the vendor tests for accuracy, safety, bias, robustness, and misuse.</li>
+              <li>Confirm whether human review, override, or fallback controls are available.</li>
+              <li>Document whether the product makes or supports consequential decisions.</li>
+              <li>Request documentation for model cards, evaluation summaries, acceptable use restrictions, and incident handling.</li>
+              <li>Confirm whether customer data is used for training, tuning, or product improvement and whether opt-out exists.</li>
+            </ul>
+          `,
+        },
+        {
+          heading: "5. Contract checkpoints and final decision",
+          content: `
+            <table>
+              <tr><th>Checkpoint</th><th>Decision / owner</th></tr>
+              <tr><td>Audit rights or alternative evidence accepted</td><td class="placeholder">[Yes / no / owner]</td></tr>
+              <tr><td>Termination rights and transition support</td><td class="placeholder">[Yes / no / owner]</td></tr>
+              <tr><td>Data return / deletion language confirmed</td><td class="placeholder">[Yes / no / owner]</td></tr>
+              <tr><td>Legal review completed</td><td class="placeholder">[Date / approver]</td></tr>
+              <tr><td>Security review completed</td><td class="placeholder">[Date / approver]</td></tr>
+              <tr><td>Final decision</td><td class="placeholder">[Approve / approve with conditions / reject]</td></tr>
+            </table>
+          `,
+        },
+      ],
+    }),
   },
   {
     slug: "model-change-review-checklist",
@@ -530,16 +983,77 @@ Review this policy quarterly and after major model or workflow changes.
     useCase: "Review risk before changing models, prompts, vendors, or training data.",
     lastReviewed: "2026-04-23",
     disclaimer: "Template for product review only. Validate legal and security impact before launch.",
-    fileName: "lexforge-model-change-review-checklist.md",
-    body: `# Model Change Review Checklist
-
-- What changed: model, prompt, retrieval source, threshold, dataset, or vendor?
-- Does the change affect regulated use cases or customer-facing disclosures?
-- Do accuracy, bias, or safety tests need to be rerun?
-- Do updated docs, model cards, or notices need publication?
-- Who approved the change?
-- What is the rollback plan?
-`,
+    fileName: "spanforge-compass-model-change-review-checklist.html",
+    formatLabel: "Editable HTML",
+    body: renderTemplateDocument({
+      title: "Model Change Review Checklist",
+      subtitle: "Structured review checklist for model swaps, prompt changes, retrieval changes, vendor migrations, and threshold updates.",
+      lastReviewed: "2026-04-23",
+      disclaimer: "This checklist supports release review only. High-risk or customer-facing changes may need deeper legal, security, quality, or compliance review.",
+      sections: [
+        {
+          heading: "1. Change summary",
+          content: `
+            <table>
+              <tr><th>Change owner</th><td class="placeholder">[Name / team]</td></tr>
+              <tr><th>Release / ticket</th><td class="placeholder">[Link or ID]</td></tr>
+              <tr><th>Change type</th><td class="placeholder">[Model / prompt / retrieval / threshold / vendor / dataset / policy]</td></tr>
+              <tr><th>Reason for change</th><td class="placeholder">[Performance, cost, quality, reliability, legal, vendor change, etc.]</td></tr>
+              <tr><th>Target release date</th><td class="placeholder">[Date]</td></tr>
+            </table>
+          `,
+        },
+        {
+          heading: "2. Impact assessment",
+          content: `
+            <ul>
+              <li>Describe what user-visible behavior changes are expected.</li>
+              <li>Identify whether the change affects regulated or high-impact use cases.</li>
+              <li>Confirm whether output confidence, escalation, or human-review thresholds change.</li>
+              <li>Assess whether the change alters data flows, retention, or vendor exposure.</li>
+              <li>Confirm whether any new jurisdictions, customer segments, or decision contexts are introduced.</li>
+            </ul>
+          `,
+        },
+        {
+          heading: "3. Validation and testing",
+          content: `
+            <table>
+              <tr><th>Check</th><th>Evidence</th><th>Status</th></tr>
+              <tr><td>Accuracy / quality benchmark rerun</td><td class="placeholder">[Link / summary]</td><td class="placeholder">[Pass / fail / pending]</td></tr>
+              <tr><td>Safety and misuse tests rerun</td><td class="placeholder">[Link / summary]</td><td class="placeholder">[Pass / fail / pending]</td></tr>
+              <tr><td>Bias / fairness checks rerun where relevant</td><td class="placeholder">[Link / summary]</td><td class="placeholder">[Pass / fail / pending]</td></tr>
+              <tr><td>Fallback / rollback tested</td><td class="placeholder">[Details]</td><td class="placeholder">[Pass / fail / pending]</td></tr>
+              <tr><td>Monitoring and alert thresholds updated</td><td class="placeholder">[Details]</td><td class="placeholder">[Pass / fail / pending]</td></tr>
+            </table>
+          `,
+        },
+        {
+          heading: "4. Documentation and disclosure updates",
+          content: `
+            <ul>
+              <li>Update model cards, internal design docs, architecture diagrams, and support playbooks.</li>
+              <li>Confirm whether transparency notices, customer-facing copy, or procurement materials need revision.</li>
+              <li>Record whether a reassessment or evidence-package refresh is required before launch.</li>
+              <li>Document whether training or enablement is needed for support, operations, or reviewers.</li>
+            </ul>
+          `,
+        },
+        {
+          heading: "5. Approval and rollback",
+          content: `
+            <table>
+              <tr><th>Approver role</th><th>Name</th><th>Date</th></tr>
+              <tr><td>Product</td><td class="placeholder">[Name]</td><td class="placeholder">[Date]</td></tr>
+              <tr><td>Engineering</td><td class="placeholder">[Name]</td><td class="placeholder">[Date]</td></tr>
+              <tr><td>Security / privacy</td><td class="placeholder">[Name]</td><td class="placeholder">[Date]</td></tr>
+              <tr><td>Legal / compliance if required</td><td class="placeholder">[Name]</td><td class="placeholder">[Date]</td></tr>
+            </table>
+            <p class="placeholder">Rollback plan: [Describe rollback trigger, owner, and maximum rollback time]</p>
+          `,
+        },
+      ],
+    }),
   },
   {
     slug: "transparency-notice-template",
@@ -548,23 +1062,60 @@ Review this policy quarterly and after major model or workflow changes.
     useCase: "Provide a clear user-facing notice that AI is being used.",
     lastReviewed: "2026-04-23",
     disclaimer: "Template wording only. Tailor to the actual product flow and jurisdiction-specific requirements.",
-    fileName: "lexforge-transparency-notice-template.md",
-    body: `# Transparency Notice Template
-
-We use AI tools to support parts of this product experience.
-
-What the AI does:
-- [Describe the task or decision support function]
-
-What a human still does:
-- [Describe review, override, or escalation steps]
-
-What data may be used:
-- [List relevant categories of data]
-
-What to do if you have questions:
-- Contact [team/contact method]
-`,
+    fileName: "spanforge-compass-transparency-notice-template.html",
+    formatLabel: "Editable HTML",
+    body: renderTemplateDocument({
+      title: "Transparency Notice Template",
+      subtitle: "User-facing notice template for AI-assisted features, outputs, and review rights.",
+      lastReviewed: "2026-04-23",
+      disclaimer: "Template wording only. Tailor this notice to the exact workflow, product surface, and jurisdiction-specific disclosure rules that apply to your service.",
+      sections: [
+        {
+          heading: "1. Short in-product notice",
+          content: `
+            <p><strong>Suggested short form</strong></p>
+            <p>This feature uses AI to help generate or analyze outputs. A human may review results before final action where required.</p>
+          `,
+        },
+        {
+          heading: "2. Full notice template",
+          content: `
+            <p>We use AI tools to support parts of this product experience.</p>
+            <p><strong>What the AI does</strong></p>
+            <ul>
+              <li class="placeholder">[Describe the task, recommendation, summary, classification, or generation function]</li>
+            </ul>
+            <p><strong>What a human still does</strong></p>
+            <ul>
+              <li class="placeholder">[Describe review, override, escalation, approval, or fallback steps]</li>
+            </ul>
+            <p><strong>What data may be used</strong></p>
+            <ul>
+              <li class="placeholder">[List relevant categories of data used or processed]</li>
+            </ul>
+            <p><strong>What this means for you</strong></p>
+            <ul>
+              <li class="placeholder">[Describe whether outputs are advisory, partially automated, or part of a decision flow]</li>
+            </ul>
+            <p><strong>Questions or concerns</strong></p>
+            <ul>
+              <li class="placeholder">Contact [team / email / support path]</li>
+            </ul>
+          `,
+        },
+        {
+          heading: "3. Implementation checklist",
+          content: `
+            <ul>
+              <li>Place the notice close to the AI interaction point, not buried only in a policy page.</li>
+              <li>Align the notice with actual workflow behavior, review steps, and escalation rights.</li>
+              <li>Update support guidance so customer-facing teams can explain the role of AI consistently.</li>
+              <li>Version-control the notice and review it after model or workflow changes.</li>
+            </ul>
+          `,
+        },
+      ],
+    }),
   },
   {
     slug: "launch-readiness-checklist",
@@ -573,16 +1124,65 @@ What to do if you have questions:
     useCase: "Final launch check for regulated AI features.",
     lastReviewed: "2026-04-23",
     disclaimer: "Planning aid only. Final launch approval should include legal, security, and product review.",
-    fileName: "lexforge-launch-readiness-checklist.md",
-    body: `# Launch Readiness Checklist
-
-- Assessment rerun completed for the release candidate.
-- Top applicable laws reviewed by an owner.
-- Required notices, policies, and support flows are live.
-- Incident escalation and contact paths are documented.
-- Model or vendor change log is updated.
-- Evidence package is stored for the launch decision.
-`,
+    fileName: "spanforge-compass-launch-readiness-checklist.html",
+    formatLabel: "Editable HTML",
+    body: renderTemplateDocument({
+      title: "Launch Readiness Checklist",
+      subtitle: "Cross-functional go-live checklist for AI features before release, customer rollout, or market expansion.",
+      lastReviewed: "2026-04-23",
+      disclaimer: "Use this as a launch decision aid only. Final release approval should include product, engineering, security, and legal/compliance review where required.",
+      sections: [
+        {
+          heading: "1. Release overview",
+          content: `
+            <table>
+              <tr><th>Feature / release name</th><td class="placeholder">[Release name]</td></tr>
+              <tr><th>Owner</th><td class="placeholder">[Name / team]</td></tr>
+              <tr><th>Customer impact</th><td class="placeholder">[Internal / limited beta / GA]</td></tr>
+              <tr><th>Markets in scope</th><td class="placeholder">[US / EU / UK / etc.]</td></tr>
+              <tr><th>Planned launch date</th><td class="placeholder">[Date]</td></tr>
+            </table>
+          `,
+        },
+        {
+          heading: "2. Compliance and documentation checks",
+          content: `
+            <ul>
+              <li>Assessment rerun completed for the release candidate or current production configuration.</li>
+              <li>Top applicable laws reviewed by a named owner.</li>
+              <li>Required notices, policies, contract terms, and support flows are live.</li>
+              <li>Evidence package stored with latest action plan, checklist state, and sources.</li>
+              <li>Model or vendor change log updated for this release.</li>
+            </ul>
+          `,
+        },
+        {
+          heading: "3. Technical and operational checks",
+          content: `
+            <table>
+              <tr><th>Control</th><th>Owner</th><th>Status</th></tr>
+              <tr><td>Monitoring and alerting configured</td><td class="placeholder">[Owner]</td><td class="placeholder">[Ready / pending]</td></tr>
+              <tr><td>Fallback / rollback tested</td><td class="placeholder">[Owner]</td><td class="placeholder">[Ready / pending]</td></tr>
+              <tr><td>Support escalation path documented</td><td class="placeholder">[Owner]</td><td class="placeholder">[Ready / pending]</td></tr>
+              <tr><td>Security and privacy review complete</td><td class="placeholder">[Owner]</td><td class="placeholder">[Ready / pending]</td></tr>
+              <tr><td>Customer communications approved</td><td class="placeholder">[Owner]</td><td class="placeholder">[Ready / pending]</td></tr>
+            </table>
+          `,
+        },
+        {
+          heading: "4. Final approval record",
+          content: `
+            <table>
+              <tr><th>Approver role</th><th>Name</th><th>Decision</th><th>Date</th></tr>
+              <tr><td>Product</td><td class="placeholder">[Name]</td><td class="placeholder">[Approve / conditional / hold]</td><td class="placeholder">[Date]</td></tr>
+              <tr><td>Engineering</td><td class="placeholder">[Name]</td><td class="placeholder">[Approve / conditional / hold]</td><td class="placeholder">[Date]</td></tr>
+              <tr><td>Security / privacy</td><td class="placeholder">[Name]</td><td class="placeholder">[Approve / conditional / hold]</td><td class="placeholder">[Date]</td></tr>
+              <tr><td>Legal / compliance if required</td><td class="placeholder">[Name]</td><td class="placeholder">[Approve / conditional / hold]</td><td class="placeholder">[Date]</td></tr>
+            </table>
+          `,
+        },
+      ],
+    }),
   },
 ];
 

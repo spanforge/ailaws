@@ -1,15 +1,15 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Methodology - LexForge",
-  description: "How LexForge evaluates AI law exposure, what outputs mean, and where human review still matters.",
+  title: "Methodology - Spanforge Compass",
+  description: "How Spanforge Compass evaluates AI law exposure, what outputs mean, and how evidence packages are assembled.",
 };
 
 const principles = [
   "Clarity over legal depth for first-pass SMB decisions",
   "Deterministic rules over opaque scoring",
   "Actionable outputs over passive law research",
-  "Visible source links, review dates, and limitations",
+  "Visible source links, review dates, limitations, and evidence exports",
 ];
 
 const workflow = [
@@ -19,20 +19,24 @@ const workflow = [
   },
   {
     title: "2. Rule-based law matching",
-    body: "Each law has explicit applicability rules. LexForge scores laws by matched rule weight, then classifies them as likely applies, may apply, or unlikely.",
+    body: "Each law has explicit applicability rules. Spanforge Compass scores laws by matched rule weight, then classifies them as likely applies, may apply, or unlikely.",
   },
   {
-    title: "3. Output enrichment",
-    body: "Likely and may-apply results are translated into plain-English summaries, first actions, grouped timelines, and owner hints for small teams.",
+    title: "3. Founder-first output enrichment",
+    body: "Likely and may-apply results are translated into plain-English summaries, weekly priorities, owner hints, and checklist-ready actions for small teams.",
   },
   {
-    title: "4. Human review",
-    body: "Founders, product leads, operations, or counsel should review any likely-applicable law before launch, expansion, or procurement decisions.",
+    title: "4. Evidence packaging",
+    body: "Assessment outputs can be exported as a structured evidence package containing results, checklist state, sources, and attestation metadata for review or diligence workflows.",
+  },
+  {
+    title: "5. Human review",
+    body: "Founders, product leads, operations, or counsel should review likely-applicable laws before launch, expansion, procurement, or customer commitments.",
   },
 ];
 
 const limitations = [
-  "LexForge is not a law firm and does not provide legal advice.",
+  "Spanforge Compass is not a law firm and does not provide legal advice.",
   "The assessment is only as good as the facts entered into the wizard.",
   "Many laws depend on implementation detail, contract structure, sector rules, and geography beyond a first-pass questionnaire.",
   "Outputs should be used to prioritize review, not replace qualified counsel in high-stakes situations.",
@@ -53,11 +57,11 @@ export default function MethodologyPage() {
             letterSpacing: "-0.03em",
           }}
         >
-          How LexForge evaluates AI compliance exposure
+          How Spanforge Compass evaluates AI compliance exposure
         </h1>
         <p style={{ color: "var(--muted)", margin: "0 0 2rem", fontSize: "1rem", lineHeight: 1.6, maxWidth: "62ch" }}>
-          LexForge is built for individuals, startups, and SMB teams that need a fast, credible first pass on AI law exposure
-          without buying enterprise tooling first.
+          Spanforge Compass is built for individuals, startups, and SMB teams that need a fast, credible first pass on AI law exposure
+          without buying heavyweight enterprise governance tooling first.
         </p>
 
         <section className="content-card" style={{ marginBottom: "1.5rem" }}>
@@ -93,10 +97,21 @@ export default function MethodologyPage() {
             What the results mean
           </h2>
           <div className="stack">
-            <MeaningRow label="Likely applies" body="The product profile strongly matches the law’s scope and you should assign an owner immediately." />
+            <MeaningRow label="Likely applies" body="The product profile strongly matches the law's scope and you should assign an owner immediately." />
             <MeaningRow label="May apply" body="There is meaningful exposure, but implementation detail or commercial setup likely determines final applicability." />
             <MeaningRow label="Unlikely" body="The current profile does not strongly match the law, but this is not a guarantee and can change with product evolution." />
           </div>
+        </section>
+
+        <section className="content-card" style={{ marginBottom: "1.5rem" }}>
+          <h2 style={{ margin: "0 0 0.8rem", color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.35rem" }}>
+            Evidence package model
+          </h2>
+          <p style={{ margin: "0 0 0.8rem", color: "var(--muted)", lineHeight: 1.55 }}>
+            Evidence exports are generated from the current assessment profile, matched laws, action plan, checklist state,
+            source links, review timestamps, and attestation metadata. They are intended to support internal review and
+            diligence workflows, not to claim legal certification.
+          </p>
         </section>
 
         <section className="content-card" style={{ marginBottom: "1.5rem" }}>
@@ -118,15 +133,15 @@ export default function MethodologyPage() {
             Review freshness
           </h2>
           <p style={{ margin: "0 0 0.8rem", color: "var(--muted)", lineHeight: 1.55 }}>
-            Law pages and templates should surface source links and review dates. Results pages should be treated as a practical starting point
-            and revisited when your product, market, or law landscape changes.
+            Law pages, templates, and key results should surface source links and review dates. Results should be treated as a
+            practical starting point and revisited when your product, market, or law landscape changes.
           </p>
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
             <Link href="/assess" className="button button--primary">
-              Run assessment →
+              Run assessment {"->"}
             </Link>
             <Link href="/templates" className="button">
-              Open templates →
+              Open templates {"->"}
             </Link>
           </div>
         </section>

@@ -93,7 +93,13 @@ export async function GET() {
 
   const assessments = await prisma.assessment.findMany({
     where: { userId: session.user.id },
-    include: { results: true },
+    include: {
+      results: true,
+      checklists: {
+        include: { items: true },
+        orderBy: { createdAt: "desc" },
+      },
+    },
     orderBy: { createdAt: "desc" },
     take: 20,
   });

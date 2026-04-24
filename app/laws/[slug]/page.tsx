@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getLawBySlug, laws, type Law, type Obligation } from "@/lib/lexforge-data";
 import { SaveLawButton } from "@/components/save-law-button";
+import { getFreshnessLabel, getFreshnessTone, getLawLastReviewed } from "@/lib/smb";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -48,6 +49,11 @@ export default async function LawDetailPage({ params }: Props) {
   const { slug } = await params;
   const law = getLawBySlug(slug);
   if (!law) notFound();
+  const lastReviewed = getLawLastReviewed(law.slug);
+  const freshnessTone = getFreshnessTone(lastReviewed);
+  const freshnessLabel = getFreshnessLabel(lastReviewed);
+  const freshnessColor =
+    freshnessTone === "fresh" ? "var(--green)" : freshnessTone === "aging" ? "#915a1e" : "var(--red)";
 
   // Group obligations by category
   const byCategory = law.obligations.reduce<Record<string, Obligation[]>>((acc, ob) => {
@@ -77,6 +83,7 @@ export default async function LawDetailPage({ params }: Props) {
               <span>Status: {STATUS_LABEL[law.status] ?? law.status}</span>
               {law.effective_date && <span>Effective: {law.effective_date}</span>}
               {law.adopted_date && <span>Adopted: {law.adopted_date}</span>}
+              <span>Last reviewed: {lastReviewed}</span>
               {law.issuing_body && <span>{law.issuing_body}</span>}
             </div>
 
@@ -90,6 +97,32 @@ export default async function LawDetailPage({ params }: Props) {
               <section>
                 <h2>Overview</h2>
                 <p style={{ color: "var(--muted)", lineHeight: 1.7 }}>{law.summary_long}</p>
+              </section>
+
+              <section style={{ marginTop: "1.5rem" }}>
+                <h2>Trust and Source Freshness</h2>
+                <div className="content-card" style={{ padding: "1rem 1.1rem" }}>
+                  <div style={{ display: "flex", gap: "0.65rem", alignItems: "center", flexWrap: "wrap" }}>
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        padding: "0.24rem 0.6rem",
+                        borderRadius: "999px",
+                        background: `${freshnessColor}22`,
+                        color: freshnessColor,
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {freshnessTone === "fresh" ? "Recently reviewed" : freshnessTone === "aging" ? "Review aging" : "Refresh recommended"}
+                    </span>
+                    <span style={{ color: "var(--muted)", fontSize: "0.92rem" }}>{freshnessLabel}</span>
+                  </div>
+                  <p style={{ margin: "0.85rem 0 0", color: "var(--navy)", fontSize: "0.94rem", lineHeight: 1.6 }}>
+                    Use the official source before relying on a requirement for launch, procurement, or regulated customer commitments.
+                    If your product scope changed since your last review, rerun the assessment before shipping.
+                  </p>
+                </div>
               </section>
 
               {/* Obligations */}
@@ -121,6 +154,7 @@ export default async function LawDetailPage({ params }: Props) {
                 <Fact label="Status" value={STATUS_LABEL[law.status] ?? law.status} />
                 {law.adopted_date && <Fact label="Adopted" value={law.adopted_date} />}
                 {law.effective_date && <Fact label="Effective" value={law.effective_date} />}
+                <Fact label="Last reviewed" value={lastReviewed} />
                 <Fact label="Obligations" value={`${law.obligations.length} documented`} />
               </dl>
               <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
@@ -143,7 +177,7 @@ export default async function LawDetailPage({ params }: Props) {
             <div className="sidebar-card sidebar-card--strong">
               <p className="kicker">Compliance Check</p>
               <h3>Does {law.short_title} apply to you?</h3>
-              <p>Run the assessment wizard to find out in under 2 minutes.</p>
+              <p>Run the assessment wizard to see whether this law is a current launch issue and what to do this week.</p>
               <Link
                 href="/assess"
                 className="button button--primary"

@@ -20,24 +20,24 @@ const bodyFont = Source_Sans_3({
 export const metadata: Metadata = {
   metadataBase: new URL("https://lexforge.ai"),
   title: {
-    default: "LexForge — AI Law Intelligence",
-    template: "%s | LexForge",
+    default: "Spanforge Compass - AI Compliance Evidence Workspace",
+    template: "%s | Spanforge Compass",
   },
   description:
-    "Track, compare, and assess compliance across global AI regulations. Your central hub for AI law intelligence.",
+    "Assess AI law exposure, track obligations, and export evidence packages for founders, startups, and SMB teams.",
   openGraph: {
-    title: "LexForge — AI Law Intelligence",
+    title: "Spanforge Compass - AI Compliance Evidence Workspace",
     description:
-      "Track, compare, and assess compliance across global AI regulations.",
+      "Assess AI law exposure, track obligations, and export evidence packages.",
     url: "https://lexforge.ai",
-    siteName: "LexForge",
+    siteName: "Spanforge Compass",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "LexForge — AI Law Intelligence",
+    title: "Spanforge Compass - AI Compliance Evidence Workspace",
     description:
-      "Track, compare, and assess compliance across global AI regulations.",
+      "Assess AI law exposure, track obligations, and export evidence packages.",
   },
 };
 

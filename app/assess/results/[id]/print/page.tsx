@@ -60,7 +60,7 @@ export default async function PrintPage({ params }: PrintPageProps) {
         </div>
 
         <section className="cover page-break-after">
-          <div className="brand">LexForge</div>
+          <div className="brand">Spanforge Compass</div>
           <h1>Compliance Snapshot</h1>
           <p className="subhead">Founder-ready summary for AI law exposure, next actions, and source links.</p>
           <div className="cover-grid">
@@ -95,13 +95,13 @@ export default async function PrintPage({ params }: PrintPageProps) {
               <ul>
                 {applicable.slice(0, 3).map((result) => (
                   <li key={result.law_id}>
-                    <strong>{result.law_short_title}:</strong> {result.plainSummary}
+                    <strong>{result.law_short_title}:</strong> {result.founderSummary}
                   </li>
                 ))}
                 {applicable.length === 0 && mayApply.length > 0
                   ? mayApply.slice(0, 3).map((result) => (
                       <li key={result.law_id}>
-                        <strong>{result.law_short_title}:</strong> {result.plainSummary}
+                        <strong>{result.law_short_title}:</strong> {result.founderSummary}
                       </li>
                     ))
                   : null}
@@ -197,8 +197,12 @@ export default async function PrintPage({ params }: PrintPageProps) {
                   </div>
                   <span className="score">{Math.round(result.relevance_score * 100)}%</span>
                 </div>
-                <p>{result.plainSummary}</p>
+                <p>{result.founderSummary}</p>
                 <div className="detail-grid">
+                  <div>
+                    <strong>Why this matters this week</strong>
+                    <p>{result.whyThisMattersThisWeek}</p>
+                  </div>
                   <div>
                     <strong>Who this applies to</strong>
                     <p>{result.whoThisAppliesTo}</p>
@@ -212,6 +216,7 @@ export default async function PrintPage({ params }: PrintPageProps) {
                     <p>{result.whatToDoFirst}</p>
                   </div>
                 </div>
+                <p className="legal">Last reviewed: {result.lastReviewed}. {result.freshnessLabel}</p>
                 <p className="legal">{result.legalDetails}</p>
               </div>
             ))}

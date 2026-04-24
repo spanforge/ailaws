@@ -3,9 +3,9 @@ import { laws } from "@/lib/lexforge-data";
 import { TEMPLATE_LIBRARY } from "@/lib/smb";
 
 export const metadata = {
-  title: "AI Compliance for Startups and SMBs - LexForge",
+  title: "AI Compliance Evidence Workspace for Startups and SMBs - Spanforge Compass",
   description:
-    "Find which AI laws apply to your product, what to do next, and what your team can download today without enterprise compliance overhead.",
+    "Find which AI laws apply to your product, what to do next, and what evidence package your team can export today.",
 };
 
 const useCases = [
@@ -19,15 +19,15 @@ const useCases = [
   },
   {
     title: "Founder-led launch readiness",
-    body: "Turn one assessment into a founder-ready PDF, a prioritized action plan, and starter templates for ops and product.",
+    body: "Turn one assessment into a founder-ready PDF, a prioritized action plan, and an exportable evidence package.",
   },
 ];
 
 const trustPoints = [
   "Deterministic rules engine with source-linked results",
-  "Plain-English summaries before legal detail",
-  "Templates and exports designed for small teams",
-  "Review dates and methodology surfaced across key pages",
+  "Founder-readable summaries before legal detail",
+  "Evidence package export for counsel, buyers, and internal review",
+  "Review dates and freshness cues surfaced across key pages",
 ];
 
 export default function HomePage() {
@@ -57,18 +57,18 @@ export default function HomePage() {
                 fontSize: "clamp(2rem, 5vw, 4rem)",
                 lineHeight: 0.98,
                 letterSpacing: "-0.04em",
-                maxWidth: "12ch",
+                maxWidth: "13ch",
               }}
             >
-              AI compliance without enterprise overhead
+              AI compliance with evidence, not just answers
             </h1>
             <p style={{ color: "var(--muted)", fontSize: "1.05rem", maxWidth: "58ch", lineHeight: 1.6, margin: 0 }}>
-              LexForge is the fastest way for small teams to figure out which AI laws apply to their product, what to do this week,
-              and what they can share with customers, cofounders, or counsel today.
+              Spanforge Compass helps small teams figure out which AI laws apply, what to do this week, and what evidence they can
+              hand to customers, cofounders, counsel, or procurement reviewers.
             </p>
             <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginTop: "1.25rem" }}>
               <Link href="/assess" className="button button--primary" style={{ fontSize: "0.95rem", padding: "0.75rem 1.2rem" }}>
-                Start free assessment →
+                Start free assessment {"->"}
               </Link>
               <Link href="/methodology" className="button" style={{ fontSize: "0.95rem", padding: "0.75rem 1.2rem" }}>
                 View methodology
@@ -81,8 +81,8 @@ export default function HomePage() {
             </p>
             <div className="stack">
               <SnapshotItem title="Top laws" body="Likely-applicable and may-apply laws explained in plain English." />
-              <SnapshotItem title="Action plan" body="Top 3 urgent actions, grouped by this week, this month, and later." />
-              <SnapshotItem title="Shareable output" body="Founder-ready PDF, CSV exports, and small-team templates." />
+              <SnapshotItem title="Action plan" body="Top urgent actions grouped by this week, this month, and later." />
+              <SnapshotItem title="Evidence package" body="Structured export with sources, checklist status, and attestation metadata." />
             </div>
           </div>
         </section>
@@ -128,7 +128,7 @@ export default function HomePage() {
               Why teams trust the output
             </h2>
             <Link href="/methodology" style={{ fontSize: "0.9rem", color: "var(--blue)" }}>
-              Read methodology →
+              Read methodology {"->"}
             </Link>
           </div>
           <div className="card-grid">
@@ -162,7 +162,7 @@ export default function HomePage() {
             />
             <ActionCard
               title="Inspect methodology"
-              body="See how LexForge scores laws, what the assessment does not guarantee, and how to review outputs responsibly."
+              body="See how Spanforge Compass evaluates exposure, where human review still matters, and how evidence exports are assembled."
               href="/methodology"
               cta="Review methodology"
             />
@@ -204,7 +204,7 @@ function ActionCard({
         className={`button ${primary ? "button--primary" : ""}`}
         style={{ marginTop: "1rem", fontSize: "0.9rem", padding: "0.6rem 1.1rem" }}
       >
-        {cta} →
+        {cta} {"->"}
       </Link>
     </div>
   );

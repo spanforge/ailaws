@@ -32,8 +32,8 @@ export function SiteShell({ children }: { children: ReactNode }) {
       <header className="site-header">
         <div className="shell site-header__inner">
           <Link href="/" className="brand">
-            <span className="brand__eyebrow">AI Compliance Intelligence</span>
-            <span className="brand__name">LexForge</span>
+            <span className="brand__eyebrow">AI Compliance Evidence Workspace</span>
+            <span className="brand__name">Spanforge Compass</span>
           </Link>
           <nav className="nav" aria-label="Primary">
             {navLinks.map((item) => {
@@ -61,7 +61,6 @@ export function SiteShell({ children }: { children: ReactNode }) {
             ) : (
               <>
                 <Link href="/login" aria-current={pathname === "/login" ? "page" : undefined}>Sign in</Link>
-                <Link href="/register" className="button button--primary" style={{fontSize:"0.82rem",padding:"0.35rem 0.85rem"}}>Get started</Link>
               </>
             )}
           </nav>
@@ -74,11 +73,11 @@ export function SiteShell({ children }: { children: ReactNode }) {
         <div className="shell site-footer__inner">
           <div>
             <Link href="/" className="brand">
-              <span className="brand__eyebrow">AI Compliance Intelligence</span>
-              <span className="brand__name">LexForge</span>
+              <span className="brand__eyebrow">AI Compliance Evidence Workspace</span>
+              <span className="brand__name">Spanforge Compass</span>
             </Link>
             <p className="footer-copy" style={{ marginTop: "0.65rem" }}>
-              Track, compare, and assess compliance across global AI regulations.
+              Assess AI law exposure, track obligations, and export evidence packages.
             </p>
           </div>
           <nav className="footer-nav" aria-label="Footer">
@@ -102,7 +101,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
         </div>
         <div className="shell footer-bottom">
           <p className="footer-copy" style={{ margin: 0 }}>
-            © {new Date().getFullYear()} LexForge &middot; Global AI Law Intelligence
+            {"©"} {new Date().getFullYear()} Spanforge Compass · AI Compliance Evidence Workspace
           </p>
         </div>
       </footer>

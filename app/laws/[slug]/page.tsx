@@ -117,7 +117,28 @@ export default async function LawDetailPage({ params }: Props) {
                       {freshnessTone === "fresh" ? "Recently reviewed" : freshnessTone === "aging" ? "Review aging" : "Refresh recommended"}
                     </span>
                     <span style={{ color: "var(--muted)", fontSize: "0.92rem" }}>{freshnessLabel}</span>
+
+                    {/* WS11: Provenance badges */}
+                    {law.source_kind && (
+                      <ProvenanceBadge kind={law.source_kind} />
+                    )}
+                    {law.confidence_level && (
+                      <ConfidenceBadge level={law.confidence_level as "high" | "medium" | "low"} />
+                    )}
+                    {law.review_status && law.review_status !== "verified" && (
+                      <ReviewStatusBadge status={law.review_status} />
+                    )}
                   </div>
+                  {law.source_citation_full && (
+                    <p style={{ margin: "0.6rem 0 0", fontSize: "0.82rem", color: "var(--muted)", fontStyle: "italic" }}>
+                      Source: {law.source_citation_full}
+                    </p>
+                  )}
+                  {(law.source_kind === "editorial_summary" || law.confidence_level === "low" || law.review_status === "draft") && (
+                    <p style={{ margin: "0.65rem 0 0", padding: "0.5rem 0.75rem", background: "var(--amber-light)", borderLeft: "3px solid var(--amber)", borderRadius: "4px", fontSize: "0.86rem", color: "#7c4a00", lineHeight: 1.5 }}>
+                      <strong>Editorial notice:</strong> This entry is based on an editorial summary or is pending verification against the primary source. Verify the official text before relying on this for compliance decisions.
+                    </p>
+                  )}
                   <p style={{ margin: "0.85rem 0 0", color: "var(--navy)", fontSize: "0.94rem", lineHeight: 1.6 }}>
                     Use the official source before relying on a requirement for launch, procurement, or regulated customer commitments.
                     If your product scope changed since your last review, rerun the assessment before shipping.
@@ -239,5 +260,94 @@ function Fact({ label, value }: { label: string; value: string }) {
       <dt style={{ color: "var(--muted)", fontSize: "0.85rem", fontWeight: 700, whiteSpace: "nowrap" }}>{label}</dt>
       <dd style={{ margin: 0, fontSize: "0.9rem", color: "var(--navy)", fontWeight: 500 }}>{value}</dd>
     </div>
+  );
+}
+
+// WS11: Provenance trust signal badge components
+
+const SOURCE_KIND_LABEL: Record<string, string> = {
+  primary_law: "Primary Law",
+  regulator_guidance: "Regulator Guidance",
+  standard: "Standard",
+  proposal: "Proposal",
+  policy: "Policy",
+  editorial_summary: "Editorial Summary",
+};
+
+function ProvenanceBadge({ kind }: { kind: string }) {
+  const label = SOURCE_KIND_LABEL[kind] ?? kind;
+  const color = kind === "primary_law" ? "var(--primary)" : kind === "editorial_summary" ? "var(--amber)" : "var(--muted)";
+  return (
+    <span
+      title={`Source type: ${label}`}
+      aria-label={`Source type: ${label}`}
+      style={{
+        display: "inline-flex",
+        padding: "0.2rem 0.55rem",
+        borderRadius: "999px",
+        background: `${color}18`,
+        color,
+        fontSize: "0.72rem",
+        fontWeight: 700,
+        border: `1px solid ${color}33`,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function ConfidenceBadge({ level }: { level: "high" | "medium" | "low" }) {
+  const config = {
+    high: { label: "High confidence", color: "var(--green)" },
+    medium: { label: "Medium confidence", color: "var(--amber)" },
+    low: { label: "Low confidence", color: "var(--red)" },
+  };
+  const { label, color } = config[level] ?? config.medium;
+  return (
+    <span
+      title={label}
+      aria-label={label}
+      style={{
+        display: "inline-flex",
+        padding: "0.2rem 0.55rem",
+        borderRadius: "999px",
+        background: `${color}18`,
+        color,
+        fontSize: "0.72rem",
+        fontWeight: 700,
+        border: `1px solid ${color}33`,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function ReviewStatusBadge({ status }: { status: string }) {
+  const config: Record<string, { label: string; color: string }> = {
+    draft: { label: "Draft", color: "var(--muted)" },
+    needs_review: { label: "Needs Review", color: "var(--amber)" },
+    superseded: { label: "Superseded", color: "var(--red)" },
+    archived: { label: "Archived", color: "var(--muted)" },
+  };
+  const { label, color } = config[status] ?? { label: status, color: "var(--muted)" };
+  return (
+    <span
+      title={`Review status: ${label}`}
+      aria-label={`Review status: ${label}`}
+      style={{
+        display: "inline-flex",
+        padding: "0.2rem 0.55rem",
+        borderRadius: "999px",
+        background: `${color}18`,
+        color,
+        fontSize: "0.72rem",
+        fontWeight: 700,
+        border: `1px solid ${color}33`,
+      }}
+    >
+      {label}
+    </span>
   );
 }

@@ -145,6 +145,14 @@ function mapStoredResults(record: AssessmentRecord): AssessmentResult[] {
       rationale: result.rationale,
       triggered_rules: [],
       triggered_obligations: [],
+      evaluation_trace: {
+        rulesEngineVersion: "stored",
+        rules: [],
+        score: result.relevanceScore,
+        totalWeight: 0,
+        matchedWeight: 0,
+        scoreBreakdown: { matchedRuleCount: 0, totalRuleCount: 0, weightedPercentage: result.relevanceScore },
+      },
     };
   });
 }
@@ -372,6 +380,7 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
     ? Math.floor((Date.now() - new Date(assessmentRecord.createdAt).getTime()) / (1000 * 60 * 60 * 24))
     : 0;
   const isStale = assessmentAgeDays > 30;
+  const isGuestAssessment = !assessmentRecord;
   const hasLawChangeSinceAssessment = alerts.some((alert) => {
     const alertDate = new Date(alert.changedAt).getTime();
     const assessmentDate = assessmentRecord?.createdAt ? new Date(assessmentRecord.createdAt).getTime() : 0;
@@ -709,6 +718,11 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
               Need something you can hand to counsel, procurement, or a customer reviewer? Export the evidence package to capture matched laws,
               clause coverage, actions, checklist state, sources, trust posture, drift triggers, and attestation metadata in one file.
             </p>
+            {isGuestAssessment ? (
+              <p style={{ margin: "0.6rem 0 0", color: "var(--muted)", fontSize: "0.82rem", lineHeight: 1.5 }}>
+                This run is currently stored as a guest assessment on this device. Sign in before your next run if you want dashboard history, shared workspaces, and saved checklist progress.
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -731,15 +745,18 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
           <button
             className={`button ${activeTab === "checklist" ? "button--primary" : ""}`}
             onClick={() => {
+              if (isGuestAssessment) {
+                return;
+              }
               if (!checklist) {
                 generateChecklist();
               } else {
                 setActiveTab("checklist");
               }
             }}
-            disabled={loadingChecklist}
+            disabled={loadingChecklist || isGuestAssessment}
           >
-            {loadingChecklist ? "Generating..." : checklist ? `Checklist (${checklist.items.length})` : "Generate checklist"}
+            {isGuestAssessment ? "Sign in to save checklist" : loadingChecklist ? "Generating..." : checklist ? `Checklist (${checklist.items.length})` : "Generate checklist"}
           </button>
         </div>
 
@@ -848,6 +865,50 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
                               ) : null}
                             </div>
                           </details>
+                          {/* WS11: Evaluation trace panel */}
+                          {(() => {
+                            const trace = results?.find((r) => r.law_slug === result.law_slug)?.evaluation_trace;
+                            if (!trace) return null;
+                            const matchedRules = trace.rules.filter((r) => r.matched);
+                            const missedRules = trace.rules.filter((r) => !r.matched);
+                            const pct = Math.round(trace.scoreBreakdown.weightedPercentage ?? 0);
+                            return (
+                              <details style={{ marginTop: "0.6rem" }}>
+                                <summary style={{ cursor: "pointer", color: "var(--muted)", fontWeight: 600, fontSize: "0.9rem" }}>
+                                  Scoring trace · {pct}% match · v{trace.rulesEngineVersion}
+                                </summary>
+                                <div style={{ marginTop: "0.75rem", fontSize: "0.85rem", lineHeight: 1.6 }}>
+                                  {matchedRules.length > 0 && (
+                                    <div style={{ marginBottom: "0.6rem" }}>
+                                      <p style={{ margin: "0 0 0.35rem", fontWeight: 700, color: "var(--green)", fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                                        ✓ Matched rules ({matchedRules.length})
+                                      </p>
+                                      <ul style={{ margin: 0, paddingLeft: "1.2rem", color: "var(--navy)" }}>
+                                        {matchedRules.map((r) => (
+                                          <li key={r.ruleId}>{r.ruleId.replace(/_/g, " ")} <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>(weight {r.weight})</span></li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                  {missedRules.length > 0 && (
+                                    <div>
+                                      <p style={{ margin: "0 0 0.35rem", fontWeight: 700, color: "var(--muted)", fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                                        — Not matched ({missedRules.length})
+                                      </p>
+                                      <ul style={{ margin: 0, paddingLeft: "1.2rem", color: "var(--muted)" }}>
+                                        {missedRules.map((r) => (
+                                          <li key={r.ruleId}>{r.ruleId.replace(/_/g, " ")} <span style={{ fontSize: "0.78rem" }}>(weight {r.weight})</span></li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                  <p style={{ margin: "0.5rem 0 0", color: "var(--muted)", fontSize: "0.78rem" }}>
+                                    Weighted score: {trace.score.toFixed(2)} / {trace.totalWeight} · {pct}%
+                                  </p>
+                                </div>
+                              </details>
+                            );
+                          })()}
                         </>
                       ) : (
                         <p style={{ margin: "0.9rem 0 0", color: "var(--muted)", fontSize: "0.9rem" }}>{result.rationale}</p>

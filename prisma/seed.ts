@@ -25,6 +25,14 @@ async function main() {
         effectiveDate: law.effective_date ? new Date(law.effective_date) : null,
         lastReviewedAt: new Date(),
         isPublished: true,
+        // WS1: Provenance
+        sourceKind: law.source_kind ?? "editorial_summary",
+        sourceAuthority: law.source_authority ?? null,
+        sourceJurisdiction: law.jurisdiction_code ?? null,
+        sourceCitationFull: law.source_citation_full ?? null,
+        confidenceLevel: law.confidence_level ?? "medium",
+        reviewStatus: law.review_status ?? "needs_review",
+        rulesEngineVersion: law.rules_engine_version ?? "1.0.0",
       },
       create: {
         slug: law.slug,
@@ -42,6 +50,14 @@ async function main() {
         effectiveDate: law.effective_date ? new Date(law.effective_date) : null,
         lastReviewedAt: new Date(),
         isPublished: true,
+        // WS1: Provenance
+        sourceKind: law.source_kind ?? "editorial_summary",
+        sourceAuthority: law.source_authority ?? null,
+        sourceJurisdiction: law.jurisdiction_code ?? null,
+        sourceCitationFull: law.source_citation_full ?? null,
+        confidenceLevel: law.confidence_level ?? "medium",
+        reviewStatus: law.review_status ?? "needs_review",
+        rulesEngineVersion: law.rules_engine_version ?? "1.0.0",
       },
     });
 
@@ -57,6 +73,13 @@ async function main() {
           priority: obl.priority,
           citation: obl.citation,
           actionRequired: obl.action_required,
+          // WS1: Provenance
+          sourceKind: obl.source_kind ?? null,
+          sourceCitationFull: obl.source_citation_full ?? null,
+          sourceExcerpt: obl.source_excerpt ?? null,
+          confidenceLevel: obl.confidence_level ?? "medium",
+          reviewStatus: obl.review_status ?? "draft",
+          editorNotes: obl.editor_notes ?? null,
         },
         create: {
           id: obl.id,
@@ -67,6 +90,13 @@ async function main() {
           priority: obl.priority,
           citation: obl.citation,
           actionRequired: obl.action_required,
+          // WS1: Provenance
+          sourceKind: obl.source_kind ?? null,
+          sourceCitationFull: obl.source_citation_full ?? null,
+          sourceExcerpt: obl.source_excerpt ?? null,
+          confidenceLevel: obl.confidence_level ?? "medium",
+          reviewStatus: obl.review_status ?? "draft",
+          editorNotes: obl.editor_notes ?? null,
         },
       });
     }

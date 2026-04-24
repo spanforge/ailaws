@@ -2,6 +2,26 @@
 //  LexForge — AI Laws Seed Data
 // ============================================================
 
+// WS1: Source kind enum — distinguishes authoritative type
+export type SourceKind =
+  | "primary_law"
+  | "regulator_guidance"
+  | "standard"
+  | "proposal"
+  | "policy"
+  | "editorial_summary";
+
+// WS1: Confidence level
+export type ConfidenceLevel = "high" | "medium" | "low";
+
+// WS1: Review/editorial status
+export type ReviewStatus =
+  | "draft"
+  | "needs_review"
+  | "verified"
+  | "superseded"
+  | "archived";
+
 export type Obligation = {
   id: string;
   title: string;
@@ -11,6 +31,13 @@ export type Obligation = {
   citation: string;
   action_required: string;
   spanforge_controls?: string[];
+  // WS1: Provenance
+  source_kind?: SourceKind;
+  source_citation_full?: string;
+  source_excerpt?: string;
+  confidence_level?: ConfidenceLevel;
+  review_status?: ReviewStatus;
+  editor_notes?: string;
 };
 
 export type ApplicabilityRule = {
@@ -52,6 +79,15 @@ export type Law = {
   freshness_sla_days?: number;
   draft_status?: "draft" | "published";
   last_reviewed_at?: string; // ISO date string
+  // WS1: Provenance fields
+  source_kind?: SourceKind;
+  source_authority?: string;
+  source_jurisdiction?: string;
+  source_citation_full?: string;
+  confidence_level?: ConfidenceLevel;
+  review_status?: ReviewStatus;
+  editor_notes?: string;
+  rules_engine_version?: string;
 };
 
 export const laws: Law[] = [
@@ -1537,6 +1573,132 @@ for (const law of laws) {
   }
 }
 
+// ── WS1: Provenance metadata injection ───────────────────────────────────────
+type ProvenanceMeta = {
+  source_kind: SourceKind;
+  source_authority: string;
+  source_citation_full: string;
+  confidence_level: ConfidenceLevel;
+  review_status: ReviewStatus;
+  rules_engine_version: string;
+};
+
+const provenanceMap: Record<string, ProvenanceMeta> = {
+  "eu-ai-act": {
+    source_kind: "primary_law",
+    source_authority: "European Parliament and Council of the European Union",
+    source_citation_full: "Regulation (EU) 2024/1689 of the European Parliament and of the Council of 13 June 2024 laying down harmonised rules on artificial intelligence",
+    confidence_level: "high",
+    review_status: "verified",
+    rules_engine_version: "1.0.0",
+  },
+  "us-ai-executive-order-14110": {
+    source_kind: "primary_law",
+    source_authority: "Office of the President of the United States",
+    source_citation_full: "Executive Order 14110 — Safe, Secure, and Trustworthy Development and Use of Artificial Intelligence, 88 Fed. Reg. 75191 (Nov. 1, 2023)",
+    confidence_level: "high",
+    review_status: "verified",
+    rules_engine_version: "1.0.0",
+  },
+  "eu-gdpr-ai": {
+    source_kind: "primary_law",
+    source_authority: "European Parliament and Council of the European Union",
+    source_citation_full: "Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016 on the protection of natural persons with regard to the processing of personal data (General Data Protection Regulation)",
+    confidence_level: "high",
+    review_status: "verified",
+    rules_engine_version: "1.0.0",
+  },
+  "ccpa-cpra": {
+    source_kind: "primary_law",
+    source_authority: "State of California",
+    source_citation_full: "California Consumer Privacy Act of 2018 (Cal. Civ. Code §§ 1798.100–1798.199.100), as amended by the California Privacy Rights Act of 2020 (Prop. 24)",
+    confidence_level: "high",
+    review_status: "verified",
+    rules_engine_version: "1.0.0",
+  },
+  "uk-ai-safety-framework": {
+    source_kind: "regulator_guidance",
+    source_authority: "UK AI Safety Institute / UK Government",
+    source_citation_full: "UK AI Safety Institute — International AI Safety Report (2024); UK Government AI Regulation Policy Paper (2023)",
+    confidence_level: "high",
+    review_status: "verified",
+    rules_engine_version: "1.0.0",
+  },
+  "canada-aida": {
+    source_kind: "proposal",
+    source_authority: "Parliament of Canada — Innovation, Science and Economic Development Canada",
+    source_citation_full: "Bill C-27, Digital Charter Implementation Act, 2022, Part 3 — Artificial Intelligence and Data Act (AIDA), 1st Session, 44th Parliament",
+    confidence_level: "medium",
+    review_status: "needs_review",
+    rules_engine_version: "1.0.0",
+  },
+  "nist-ai-rmf": {
+    source_kind: "standard",
+    source_authority: "National Institute of Standards and Technology (NIST)",
+    source_citation_full: "NIST AI 100-1, Artificial Intelligence Risk Management Framework (AI RMF 1.0), January 2023",
+    confidence_level: "high",
+    review_status: "verified",
+    rules_engine_version: "1.0.0",
+  },
+  "nyc-local-law-144": {
+    source_kind: "primary_law",
+    source_authority: "New York City Council",
+    source_citation_full: "New York City Local Law 144 of 2021 — Automated Employment Decision Tools (Int. 1894-A)",
+    confidence_level: "high",
+    review_status: "verified",
+    rules_engine_version: "1.0.0",
+  },
+  "colorado-sb205": {
+    source_kind: "primary_law",
+    source_authority: "Colorado General Assembly",
+    source_citation_full: "Colorado SB 24-205 — Consumer Protections for Artificial Intelligence, enacted June 2024",
+    confidence_level: "high",
+    review_status: "verified",
+    rules_engine_version: "1.0.0",
+  },
+  "eu-product-liability-directive": {
+    source_kind: "proposal",
+    source_authority: "European Commission / European Parliament",
+    source_citation_full: "Proposal for a Directive of the European Parliament and of the Council on liability for defective products (COM(2022) 495 final), revising Directive 85/374/EEC",
+    confidence_level: "medium",
+    review_status: "needs_review",
+    rules_engine_version: "1.0.0",
+  },
+  "eu-cyber-resilience-act": {
+    source_kind: "primary_law",
+    source_authority: "European Parliament and Council of the European Union",
+    source_citation_full: "Regulation (EU) 2024/2847 of the European Parliament and of the Council on horizontal cybersecurity requirements for products with digital elements (Cyber Resilience Act)",
+    confidence_level: "high",
+    review_status: "verified",
+    rules_engine_version: "1.0.0",
+  },
+  "un-ai-governance-framework": {
+    source_kind: "regulator_guidance",
+    source_authority: "United Nations Secretary-General / AI Advisory Body",
+    source_citation_full: "Governing AI for Humanity: Final Report, UN AI Advisory Body, September 2024; UN General Assembly Resolution A/RES/78/311",
+    confidence_level: "medium",
+    review_status: "verified",
+    rules_engine_version: "1.0.0",
+  },
+};
+
+for (const law of laws) {
+  const prov = provenanceMap[law.slug];
+  if (prov) {
+    law.source_kind = prov.source_kind;
+    law.source_authority = prov.source_authority;
+    law.source_citation_full = prov.source_citation_full;
+    law.confidence_level = prov.confidence_level;
+    law.review_status = prov.review_status;
+    law.rules_engine_version = prov.rules_engine_version;
+  } else {
+    // Default provenance for laws not yet individually verified
+    law.source_kind = "editorial_summary";
+    law.confidence_level = "medium";
+    law.review_status = "needs_review";
+    law.rules_engine_version = "1.0.0";
+  }
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

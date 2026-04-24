@@ -23,10 +23,7 @@ export const config = {
     "/alerts/:path*",
     "/alerts",
     "/admin/:path*",
-    "/assess",
-    "/assess/:path*",
     "/evidence",
     "/evidence/:path*",
-    "/templates/:path*",
   ],
 };

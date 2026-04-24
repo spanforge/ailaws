@@ -31,7 +31,7 @@ const coreJobs = [
 
 const trustPoints = [
   { icon: "🔗", label: "Deterministic", point: "Rules engine with source-linked results — not LLM guesses" },
-  { icon: "📖", label: "Decision-grade", point: "Executive verdicts and obligation breakdowns ready for internal reviews" },
+  { icon: "📖", label: "Inspectable", point: "Confidence levels, review states, and citations stay visible in the working surface" },
   { icon: "📦", label: "Evidence-ready", point: "Export evidence packages with sources, checklist state, and attestation metadata" },
   { icon: "🔄", label: "Drift-aware", point: "Reassessment triggers fire when tracked laws change or assessments go stale" },
 ];
@@ -74,11 +74,11 @@ export default function HomePage() {
               The evidence-readiness workspace for AI launches
             </h1>
             <p style={{ color: "var(--muted)", fontSize: "1.05rem", maxWidth: "56ch", lineHeight: 1.6, margin: 0 }}>
-              Compass helps B2B SaaS teams shipping AI into enterprise procurement understand which laws apply, produce exportable evidence, and stay current as regulation changes — without waiting for legal.
+              Compass helps B2B SaaS teams shipping AI into enterprise procurement understand which laws apply, produce exportable evidence, and stay current as regulation changes — without starting from a blank spreadsheet.
             </p>
             <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginTop: "1.25rem" }}>
               <Link href="/assess" className="button button--primary" style={{ fontSize: "0.95rem", padding: "0.75rem 1.2rem" }}>
-                Start free assessment →
+                Start assessment →
               </Link>
               <Link href="/methodology" className="button" style={{ fontSize: "0.95rem", padding: "0.75rem 1.2rem" }}>
                 View methodology
@@ -184,7 +184,7 @@ export default function HomePage() {
               title="Export for procurement"
               body="AI governance summary, regulatory applicability memo, evidence checklist, and customer-facing trust packet — ready to hand over."
               href="/templates"
-              cta="Open templates"
+              cta="Browse templates"
             />
             <ActionCard
               icon="🔍"

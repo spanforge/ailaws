@@ -25,6 +25,19 @@ export async function POST(req: NextRequest, { params }: Props) {
   const email = body.email?.trim().toLowerCase();
   if (!email) return NextResponse.json({ error: "Email required" }, { status: 400 });
 
+  const duplicateInvite = await prisma.organizationInvite.findFirst({
+    where: {
+      organizationId: id,
+      email,
+      acceptedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+  });
+
+  if (duplicateInvite) {
+    return NextResponse.json({ data: duplicateInvite }, { status: 200 });
+  }
+
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
 

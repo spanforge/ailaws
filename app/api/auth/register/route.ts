@@ -3,6 +3,12 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { captureException } from "@/lib/monitoring";
 import { buildRateLimitHeaders, getRequestFingerprint, takeRateLimit } from "@/lib/rate-limit";
+import {
+  buildEmailVerificationUrl,
+  createEmailVerificationToken,
+  isEmailVerificationDeliveryConfigured,
+  sendVerificationEmail,
+} from "@/lib/auth-verification";
 
 export const runtime = "nodejs";
 
@@ -13,6 +19,7 @@ export async function POST(req: NextRequest) {
     key: `auth:register:${getRequestFingerprint(req)}`,
     limit: 5,
     windowMs: 15 * 60 * 1000,
+    label: "auth:register",
   });
 
   if (!rateLimit.allowed) {
@@ -64,19 +71,81 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Name must be 80 characters or fewer" }, { status: 400 });
   }
 
+  if (process.env.NODE_ENV === "production" && !isEmailVerificationDeliveryConfigured()) {
+    return NextResponse.json(
+      { error: "Registration is unavailable until email verification delivery is configured." },
+      { status: 503 },
+    );
+  }
+
   try {
     const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (existing) {
-      return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
+      if (existing.emailVerified) {
+        return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
+      }
+
+      const verification = createEmailVerificationToken();
+      const verifyUrl = buildEmailVerificationUrl(verification.token);
+
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          name: normalizedName ?? existing.name,
+          password: await bcrypt.hash(password, 12),
+          verificationTokenHash: verification.tokenHash,
+          verificationTokenExpiresAt: verification.expiresAt,
+        },
+      });
+
+      const delivery = await sendVerificationEmail({
+        email: normalizedEmail,
+        name: normalizedName ?? existing.name,
+        verifyUrl,
+      });
+
+      return NextResponse.json(
+        {
+          ok: true,
+          message: delivery.delivered
+            ? "Your account exists but is not verified yet. We sent a fresh verification email."
+            : "Your account exists but is not verified yet. A verification link was generated for local development.",
+          verifyUrl: delivery.previewUrl,
+        },
+        { status: 200 },
+      );
     }
 
     const hashed = await bcrypt.hash(password, 12);
+    const verification = createEmailVerificationToken();
+    const verifyUrl = buildEmailVerificationUrl(verification.token);
     const user = await prisma.user.create({
-      data: { email: normalizedEmail, password: hashed, name: normalizedName },
+      data: {
+        email: normalizedEmail,
+        password: hashed,
+        name: normalizedName,
+        verificationTokenHash: verification.tokenHash,
+        verificationTokenExpiresAt: verification.expiresAt,
+      },
       select: { id: true, email: true, name: true },
     });
 
-    return NextResponse.json({ user }, { status: 201 });
+    const delivery = await sendVerificationEmail({
+      email: normalizedEmail,
+      name: normalizedName,
+      verifyUrl,
+    });
+
+    return NextResponse.json(
+      {
+        user,
+        message: delivery.delivered
+          ? "Account created. Check your inbox to verify your email before signing in."
+          : "Account created. Use the local verification link below to activate your account.",
+        verifyUrl: delivery.previewUrl,
+      },
+      { status: 201 },
+    );
   } catch (error) {
     await captureException(error, {
       tags: { surface: "auth", action: "register" },

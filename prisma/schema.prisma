@@ -15,6 +15,9 @@ model User {
   name      String?
   password  String?
   role      String   @default("user")
+  emailVerified DateTime?
+  verificationTokenHash String?
+  verificationTokenExpiresAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -23,6 +26,14 @@ model User {
   alertPreferences AlertPreference[]
   orgMemberships   OrganizationMember[]
   assignedItems    ChecklistItem[]     @relation("Assignee")
+
+  // WS1: Provenance — laws this user verified
+  verifiedLaws     Law[]               @relation("LawVerifier")
+
+  // WS2: Editorial Workflow
+  auditLogEntries  ContentEditAuditLog[] @relation("AuditLogActor")
+  reviewRequests   ContentApproval[]     @relation("ContentReviewer")
+  approvalDecisions ContentApproval[]   @relation("ContentApprover")
 
   @@map("users")
 }
@@ -47,12 +58,37 @@ model Law {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
+  // WS1: Legal Provenance
+  sourceKind         String?   // primary_law | regulator_guidance | standard | proposal | policy | editorial_summary
+  sourceAuthority    String?
+  sourceJurisdiction String?
+  sourceCitationFull String?
+  verifiedAt         DateTime?
+  verifiedByUserId   String?
+  verifiedBy         User?     @relation("LawVerifier", fields: [verifiedByUserId], references: [id])
+  confidenceLevel    String    @default("medium") // high | medium | low
+  reviewStatus       String    @default("needs_review") // draft | needs_review | verified | superseded | archived
+  supersededById     String?
+  editorNotes        String?
+  rulesEngineVersion String?
+
+  // WS8: Source Health
+  sourceHealthStatus String?   // ok | redirect | broken | archived | unknown
+  sourceCheckedAt    DateTime?
+  sourceArchiveUrl   String?
+
   obligations        Obligation[]
   applicabilityRules ApplicabilityRule[]
   savedBy            SavedLaw[]
   changelog          LawChangelog[]
   assessmentResults  AssessmentResult[]
+  editAuditLogs      ContentEditAuditLog[]
+  sourceHealthChecks SourceHealthCheck[]
 
+  @@index([jurisdiction])
+  @@index([reviewStatus])
+  @@index([sourceHealthStatus])
+  @@index([isPublished])
   @@map("laws")
 }
 
@@ -67,9 +103,23 @@ model Obligation {
   citation       String?
   actionRequired String?
   createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // WS1: Provenance
+  sourceKind         String?
+  sourceCitationFull String?
+  sourceExcerpt      String?
+  confidenceLevel    String    @default("medium")
+  reviewStatus       String    @default("draft")
+  changeReason       String?
+  editorNotes        String?
+  verifiedAt         DateTime?
 
   checklistItems ChecklistItem[]
+  editAuditLogs  ContentEditAuditLog[]
 
+  @@index([lawId])
+  @@index([reviewStatus])
   @@map("obligations")
 }
 
@@ -99,6 +149,7 @@ model Assessment {
   results    AssessmentResult[]
   checklists Checklist[]
 
+  @@index([userId])
   @@map("assessments")
 }
 
@@ -114,6 +165,12 @@ model AssessmentResult {
   rationale           String?
   createdAt           DateTime   @default(now())
 
+  // WS3: Rules Engine Explainability
+  rulesEngineVersion String?
+  evaluationTrace    String? // JSON: { matchedRules, missedRules, score, weightBreakdown }
+
+  @@index([assessmentId])
+  @@index([lawSlug])
   @@map("assessment_results")
 }
 
@@ -172,7 +229,70 @@ model LawChangelog {
   details    String?
   changedAt  DateTime @default(now())
 
+  // WS2: Editorial Governance
+  actorId               String?
+  actorName             String?
+  changeReason          String?
+  isCorrectionNotUpdate Boolean @default(false)
+
   @@map("law_changelog")
+}
+
+// WS2: Content Edit Audit Log — every law/obligation field change
+model ContentEditAuditLog {
+  id           String   @id @default(cuid())
+  entityType   String   // law | obligation
+  entityId     String
+  lawId        String?
+  law          Law?     @relation(fields: [lawId], references: [id])
+  obligationId String?
+  obligation   Obligation? @relation(fields: [obligationId], references: [id])
+  actorId      String
+  actor        User     @relation("AuditLogActor", fields: [actorId], references: [id])
+  fieldName    String
+  oldValue     String?
+  newValue     String?
+  changeReason String?
+  createdAt    DateTime @default(now())
+
+  @@index([entityId])
+  @@index([actorId])
+  @@map("content_edit_audit_logs")
+}
+
+// WS2: Content Approval Workflow
+model ContentApproval {
+  id           String   @id @default(cuid())
+  entityType   String   // law | obligation
+  entityId     String
+  reviewerId   String
+  reviewer     User     @relation("ContentReviewer", fields: [reviewerId], references: [id])
+  approverId   String?
+  approver     User?    @relation("ContentApprover", fields: [approverId], references: [id])
+  status       String   @default("pending") // pending | approved | rejected | superseded
+  notes        String?
+  requestedAt  DateTime @default(now())
+  resolvedAt   DateTime?
+
+  @@index([entityId])
+  @@map("content_approvals")
+}
+
+// WS8: Source Health Checks
+model SourceHealthCheck {
+  id              String   @id @default(cuid())
+  lawId           String
+  law             Law      @relation(fields: [lawId], references: [id])
+  checkedUrl      String   // The URL that was checked
+  status          String   // ok | redirect | broken | timeout | blocked | archived | content_changed | unknown
+  httpStatus      Int?
+  redirectUrl     String?
+  checkedAt       DateTime @default(now())
+  errorMessage    String?
+  responseTimeMs  Int?
+
+  @@index([lawId])
+  @@map("source_health_checks")
 }
 
 model AlertPreference {

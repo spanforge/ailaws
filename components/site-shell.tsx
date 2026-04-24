@@ -29,8 +29,8 @@ export function SiteShell({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <a href="#main-content" className="skip-link">Skip to main content</a>
-      <header className="site-header">
+      <a href="#main-content" className="skip-to-content">Skip to main content</a>
+      <header className="site-header" role="banner">
         <div className="shell site-header__inner">
           <Link href="/" className="brand">
             <span className="brand__eyebrow">AI Compliance Evidence Workspace</span>
@@ -68,9 +68,9 @@ export function SiteShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <div id="main-content">{children}</div>
+      <div id="main-content" role="main">{children}</div>
 
-      <footer className="site-footer">
+      <footer className="site-footer" role="contentinfo">
         <div className="shell site-footer__inner">
           <div>
             <Link href="/" className="brand">
@@ -97,6 +97,12 @@ export function SiteShell({ children }: { children: ReactNode }) {
               <Link href="/guides">Sector Guides</Link>
               <Link href="/penalties">Penalty Calculator</Link>
               <Link href="/glossary">Glossary</Link>
+            </div>
+            <div className="footer-nav__col">
+              <p className="footer-nav__col-heading">Trust</p>
+              <Link href="/pricing">Pricing</Link>
+              <Link href="/privacy">Privacy Policy</Link>
+              <Link href="/terms">Terms of Service</Link>
             </div>
           </nav>
         </div>

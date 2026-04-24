@@ -1,23 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { laws } from "@/lib/lexforge-data";
-import { runRulesEngine, type AssessmentInput } from "@/lib/rules-engine";
+import { runRulesEngine, RULES_ENGINE_VERSION, type AssessmentInput } from "@/lib/rules-engine";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { captureException } from "@/lib/monitoring";
-import { buildRateLimitHeaders, takeRateLimit } from "@/lib/rate-limit";
+import { buildRateLimitHeaders, getRequestFingerprint, takeRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const userId = session.user.id;
+  const userId = session?.user?.id ?? null;
+  const rateLimitKey = userId ? `assessments:create:${userId}` : `assessments:create:guest:${getRequestFingerprint(req)}`;
   const rateLimit = takeRateLimit({
-    key: `assessments:create:${userId}`,
+    key: rateLimitKey,
     limit: 20,
     windowMs: 10 * 60 * 1000,
+    label: "assessments:create",
   });
 
   if (!rateLimit.allowed) {
@@ -73,6 +72,9 @@ export async function POST(req: NextRequest) {
             relevanceScore: r.relevance_score,
             applicabilityStatus: r.applicability_status,
             rationale: r.rationale,
+            // WS3: Persist evaluation trace and version for explainability
+            rulesEngineVersion: RULES_ENGINE_VERSION,
+            evaluationTrace: JSON.stringify(r.evaluation_trace),
           })),
         },
       },
@@ -82,7 +84,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     await captureException(error, {
       tags: { surface: "assessments", action: "create" },
-      extra: { userId },
+      extra: { userId: userId ?? "guest" },
     });
     return NextResponse.json({ error: "Unable to run assessment right now" }, { status: 500 });
   }

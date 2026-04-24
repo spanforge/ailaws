@@ -59,6 +59,15 @@ type Organization = {
   invites: Array<{ id: string; email: string; createdAt: string; expiresAt: string }>;
 };
 
+type IncomingInvite = {
+  id: string;
+  token: string;
+  email: string;
+  createdAt: string;
+  expiresAt: string;
+  organization: { id: string; name: string; slug: string; createdAt: string };
+};
+
 function parseAssessmentInput(assessment: Assessment): AssessmentInput {
   return {
     ...JSON.parse(assessment.companyProfile ?? "{}"),
@@ -82,6 +91,14 @@ function mapStoredResults(assessment: Assessment): AssessmentResult[] {
       rationale: result.rationale,
       triggered_rules: [],
       triggered_obligations: [],
+      evaluation_trace: {
+        rulesEngineVersion: "stored",
+        rules: [],
+        score: result.relevanceScore,
+        totalWeight: 0,
+        matchedWeight: 0,
+        scoreBreakdown: { matchedRuleCount: 0, totalRuleCount: 0, weightedPercentage: result.relevanceScore },
+      },
     };
   });
 }
@@ -124,15 +141,18 @@ export default function DashboardPage() {
   const [savedSlugs, setSavedSlugs] = useState<SavedEntry[]>([]);
   const [alerts, setAlerts] = useState<ChangeEntry[]>([]);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [incomingInvites, setIncomingInvites] = useState<IncomingInvite[]>([]);
   const [orgName, setOrgName] = useState("");
   const [orgSlug, setOrgSlug] = useState("");
   const [inviteEmails, setInviteEmails] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [creatingOrg, setCreatingOrg] = useState(false);
   const [invitingOrgId, setInvitingOrgId] = useState<string | null>(null);
+  const [acceptingInviteId, setAcceptingInviteId] = useState<string | null>(null);
 
   const enacted = laws.filter((law) => law.status === "in_force" || law.status === "enacted").length;
   const proposed = laws.filter((law) => law.status === "proposed" || law.status === "draft").length;
+  const isAdmin = session?.user?.role === "admin";
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -146,11 +166,13 @@ export default function DashboardPage() {
       fetch("/api/saved-laws").then((response) => response.json()),
       fetch("/api/alerts").then((response) => response.json()).catch(() => ({ data: [] })),
       fetch("/api/organizations").then((response) => response.json()).catch(() => ({ data: [] })),
-    ]).then(([assessmentResponse, savedResponse, alertsResponse, organizationsResponse]) => {
+      fetch("/api/organizations/invites").then((response) => response.json()).catch(() => ({ data: [] })),
+    ]).then(([assessmentResponse, savedResponse, alertsResponse, organizationsResponse, incomingInvitesResponse]) => {
       setAssessments(assessmentResponse.data ?? []);
       setSavedSlugs(savedResponse.data ?? []);
       setAlerts(alertsResponse.data ?? []);
       setOrganizations(organizationsResponse.data ?? []);
+      setIncomingInvites(incomingInvitesResponse.data ?? []);
       setLoading(false);
     });
   }, [status]);
@@ -225,6 +247,8 @@ export default function DashboardPage() {
       .slice(0, 5);
   }, [alerts, savedLaws]);
 
+  const showGettingStarted = assessments.length === 0 && savedSlugs.length === 0 && organizations.length === 0;
+
   async function createOrganization() {
     if (!orgName.trim() || !orgSlug.trim()) return;
     setCreatingOrg(true);
@@ -258,6 +282,26 @@ export default function DashboardPage() {
     }
     setInvitingOrgId(null);
   }
+
+      async function acceptInvite(inviteId: string) {
+        setAcceptingInviteId(inviteId);
+        const response = await fetch("/api/organizations/invites", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ inviteId }),
+        });
+
+        if (response.ok) {
+          const [organizationsResponse, invitesResponse] = await Promise.all([
+            fetch("/api/organizations").then((res) => res.json()).catch(() => ({ data: [] })),
+            fetch("/api/organizations/invites").then((res) => res.json()).catch(() => ({ data: [] })),
+          ]);
+          setOrganizations(organizationsResponse.data ?? []);
+          setIncomingInvites(invitesResponse.data ?? []);
+        }
+
+        setAcceptingInviteId(null);
+      }
 
   if (status === "loading" || loading) {
     return (
@@ -311,6 +355,30 @@ export default function DashboardPage() {
             <span>Laws saved</span>
           </div>
         </div>
+
+        {showGettingStarted ? (
+          <section className="content-card" style={{ padding: "1.2rem 1.25rem", marginBottom: "1.25rem", background: "linear-gradient(135deg, rgba(37,99,235,0.06), rgba(15,23,42,0.02))" }}>
+            <p style={{ margin: "0 0 0.25rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+              Getting started
+            </p>
+            <h2 style={{ margin: 0, color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.35rem" }}>
+              Launch your first compliant workspace in three steps
+            </h2>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.85rem", marginTop: "1rem" }}>
+              {[
+                { title: "1. Run an assessment", body: "Capture your AI use case and generate a tailored law map with next actions.", href: "/assess", cta: "Start assessment" },
+                { title: "2. Save laws to watch", body: "Track the jurisdictions and laws you actually rely on so updates stay relevant.", href: "/explore", cta: "Open law explorer" },
+                { title: "3. Invite your team", body: "Create a workspace once the first assessment is in place and route ownership across the checklist.", href: "/dashboard", cta: "Set up workspace" },
+              ].map((step) => (
+                <div key={step.title} style={{ padding: "0.95rem", borderRadius: "14px", background: "rgba(255,255,255,0.78)", border: "1px solid rgba(16,32,48,0.08)" }}>
+                  <p style={{ margin: 0, fontWeight: 700, color: "var(--navy)" }}>{step.title}</p>
+                  <p style={{ margin: "0.35rem 0 0.8rem", color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.55 }}>{step.body}</p>
+                  <Link href={step.href} className="button" style={{ fontSize: "0.82rem" }}>{step.cta}</Link>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.4fr) minmax(320px, 1fr)", gap: "1rem", marginBottom: "1rem" }}>
           <section className="content-card" style={{ padding: "1.15rem 1.2rem" }}>
@@ -664,6 +732,32 @@ export default function DashboardPage() {
             )}
           </section>
 
+          <section className="content-card" style={{ padding: "1rem 1.1rem" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.8rem" }}>
+              <h2 style={{ fontFamily: "var(--font-heading)", fontSize: "1.2rem", color: "var(--navy)", margin: 0 }}>Pending invites</h2>
+              <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>{incomingInvites.length} open</span>
+            </div>
+            {incomingInvites.length === 0 ? (
+              <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem", lineHeight: 1.55 }}>
+                No invites waiting on this account. When a teammate invites this email address, you can join the workspace from here.
+              </p>
+            ) : (
+              <div className="stack">
+                {incomingInvites.map((invite) => (
+                  <div key={invite.id} style={{ padding: "0.95rem", borderRadius: "14px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+                    <p style={{ margin: 0, fontWeight: 700, color: "var(--navy)" }}>{invite.organization.name}</p>
+                    <p style={{ margin: "0.25rem 0 0.65rem", fontSize: "0.84rem", color: "var(--muted)" }}>
+                      Join workspace {invite.organization.slug} before {formatShortDate(invite.expiresAt)}.
+                    </p>
+                    <button className="button button--primary" onClick={() => acceptInvite(invite.id)} disabled={acceptingInviteId === invite.id}>
+                      {acceptingInviteId === invite.id ? "Joining..." : "Accept invite"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
           <section>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
               <h2 style={{ fontFamily: "var(--font-heading)", fontSize: "1.2rem", color: "var(--navy)", margin: 0 }}>Templates and quick actions</h2>
@@ -693,6 +787,11 @@ export default function DashboardPage() {
               <Link href="/alerts" className="button">
                 Regulatory alerts
               </Link>
+              {isAdmin ? (
+                <Link href="/admin/sources" className="button">
+                  Trust ops
+                </Link>
+              ) : null}
             </div>
           </section>
         </div>

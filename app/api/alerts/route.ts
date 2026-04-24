@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { isRegulatoryAlertDeliveryConfigured } from "@/lib/alert-delivery";
 
 /**
  * GET /api/alerts
@@ -61,5 +62,5 @@ export async function GET() {
     lawJurisdiction: lawMap[e.lawSlug]?.jurisdiction ?? "",
   }));
 
-  return NextResponse.json({ data: enriched, prefs });
+  return NextResponse.json({ data: enriched, prefs, deliveryConfigured: isRegulatoryAlertDeliveryConfigured() });
 }

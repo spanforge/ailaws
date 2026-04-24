@@ -30,8 +30,6 @@ type AlertPref = {
   id: string;
   lawSlug: string | null;
   jurisdiction: string | null;
-  emailEnabled: boolean;
-  digestMode: "immediate" | "daily" | "weekly";
 };
 
 type Organization = {
@@ -65,6 +63,7 @@ export default function AlertsPage() {
   const { status } = useSession();
   const [entries, setEntries] = useState<ChangeEntry[]>([]);
   const [prefs, setPrefs] = useState<AlertPref[]>([]);
+  const [deliveryConfigured, setDeliveryConfigured] = useState(false);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [assessments, setAssessments] = useState<AssessmentMini[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,7 +73,6 @@ export default function AlertsPage() {
   const [addJx, setAddJx] = useState("");
   const [saving, setSaving] = useState(false);
   const [filterType, setFilterType] = useState("all");
-  const [editingPrefId, setEditingPrefId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -84,9 +82,10 @@ export default function AlertsPage() {
       fetch("/api/assessments").catch(() => null),
     ]);
     if (alertsResponse.ok) {
-      const { data, prefs: p } = await alertsResponse.json();
+      const { data, prefs: p, deliveryConfigured: deliveryReady } = await alertsResponse.json();
       setEntries(data ?? []);
       setPrefs(p ?? []);
+      setDeliveryConfigured(Boolean(deliveryReady));
     }
     if (organizationsResponse && organizationsResponse.ok) {
       const { data } = await organizationsResponse.json();
@@ -129,17 +128,6 @@ export default function AlertsPage() {
     load();
   }
 
-  async function updatePref(id: string, patch: Partial<Pick<AlertPref, "emailEnabled" | "digestMode">>) {
-    setEditingPrefId(id);
-    await fetch("/api/alerts/preferences", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, ...patch }),
-    });
-    setEditingPrefId(null);
-    load();
-  }
-
   const filtered = filterType === "all" ? entries : entries.filter((entry) => entry.changeType === filterType);
 
   if (status === "loading" || loading) {
@@ -158,10 +146,10 @@ export default function AlertsPage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1rem", marginBottom: "2rem" }}>
           <div>
             <h1 style={{ fontSize: "1.75rem", fontWeight: 700, marginBottom: "0.25rem", color: "var(--navy)", fontFamily: "var(--font-heading)" }}>
-              Regulatory alerts
+              Regulatory watchlist
             </h1>
             <p style={{ color: "var(--muted)", fontSize: "0.95rem" }}>
-              Recent legal changes, alert routing controls, and team visibility for the laws you track.
+              Recent legal changes, in-app watchlists, and team visibility for the laws you track.
             </p>
           </div>
           <button className="button" onClick={() => setShowAddPanel((value) => !value)}>
@@ -171,7 +159,7 @@ export default function AlertsPage() {
 
         {showAddPanel ? (
           <div className="content-card" style={{ marginBottom: "1.5rem", padding: "1.25rem 1.5rem" }}>
-            <h3 style={{ fontWeight: 700, marginBottom: "1rem", color: "var(--navy)" }}>Set up a new alert</h3>
+            <h3 style={{ fontWeight: 700, marginBottom: "1rem", color: "var(--navy)" }}>Add a law to your watchlist</h3>
             <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
               <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", cursor: "pointer" }}>
                 <input type="radio" name="addType" value="jurisdiction" checked={addType === "jurisdiction"} onChange={() => setAddType("jurisdiction")} />
@@ -213,11 +201,27 @@ export default function AlertsPage() {
 
             <div style={{ marginTop: "1rem", display: "flex", gap: "0.75rem" }}>
               <button className="button button--primary" onClick={addPref} disabled={saving || (addType === "law" ? !addSlug : !addJx)}>
-                {saving ? "Saving..." : "Save alert"}
+                {saving ? "Saving..." : "Save watchlist"}
               </button>
             </div>
           </div>
         ) : null}
+
+        <div className="content-card" style={{ marginBottom: "1.5rem", padding: "1rem 1.25rem", background: deliveryConfigured ? "rgba(22,163,74,0.06)" : "rgba(244,162,97,0.09)", borderColor: deliveryConfigured ? "rgba(22,163,74,0.22)" : "rgba(244,162,97,0.25)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+            <div>
+              <p style={{ margin: 0, fontWeight: 700, color: "var(--navy)" }}>Delivery status</p>
+              <p style={{ margin: "0.35rem 0 0", color: "var(--muted)", fontSize: "0.9rem" }}>
+                {deliveryConfigured
+                  ? "Immediate email alerts are enabled for watchlist entries marked for email delivery. New changelog items continue to appear in this in-app feed as well."
+                  : "This workspace is currently using the in-app feed only. Configure alert email delivery to send immediate watchlist updates to matched users."}
+              </p>
+            </div>
+            <span style={{ alignSelf: "flex-start", padding: "0.25rem 0.6rem", borderRadius: "999px", background: deliveryConfigured ? "rgba(22,163,74,0.14)" : "rgba(244,162,97,0.18)", color: deliveryConfigured ? "var(--green)" : "#915a1e", fontSize: "0.76rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              {deliveryConfigured ? "Email live" : "In-app only"}
+            </span>
+          </div>
+        </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 320px", gap: "2rem", alignItems: "start" }}>
           <div>
@@ -318,10 +322,10 @@ export default function AlertsPage() {
 
           <div className="stack">
             <div className="content-card" style={{ padding: "1rem 1.25rem" }}>
-              <h3 style={{ fontWeight: 700, marginBottom: "0.85rem", fontSize: "0.95rem", color: "var(--navy)" }}>Alert routing</h3>
+              <h3 style={{ fontWeight: 700, marginBottom: "0.85rem", fontSize: "0.95rem", color: "var(--navy)" }}>Watchlist coverage</h3>
               {prefs.length === 0 ? (
                 <p style={{ fontSize: "0.85rem", color: "var(--muted)" }}>
-                  No preferences yet. Add one to filter alerts to laws you care about.
+                  No watchlist filters yet. Add one to focus the in-app change feed on laws you care about.
                 </p>
               ) : (
                 <div style={{ display: "grid", gap: "0.75rem" }}>
@@ -339,29 +343,9 @@ export default function AlertsPage() {
                           Remove
                         </button>
                       </div>
-                      <div style={{ display: "grid", gap: "0.6rem" }}>
-                        <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", fontSize: "0.82rem", color: "var(--muted)" }}>
-                          Email delivery
-                          <input
-                            type="checkbox"
-                            checked={pref.emailEnabled}
-                            onChange={(event) => updatePref(pref.id, { emailEnabled: event.target.checked })}
-                            disabled={editingPrefId === pref.id}
-                          />
-                        </label>
-                        <label style={{ display: "grid", gap: "0.3rem", fontSize: "0.82rem", color: "var(--muted)" }}>
-                          Digest mode
-                          <select
-                            value={pref.digestMode}
-                            onChange={(event) => updatePref(pref.id, { digestMode: event.target.value as AlertPref["digestMode"] })}
-                            disabled={editingPrefId === pref.id}
-                          >
-                            <option value="immediate">Immediate</option>
-                            <option value="daily">Daily</option>
-                            <option value="weekly">Weekly</option>
-                          </select>
-                        </label>
-                      </div>
+                      <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.5 }}>
+                        This filter narrows the in-app change feed and reassessment prompts for your account.
+                      </p>
                     </div>
                   ))}
                 </div>

@@ -55,3 +55,47 @@ export async function captureException(error: unknown, context?: MonitoringConte
     Sentry.captureException(error);
   });
 }
+
+export type LogLevel = "debug" | "info" | "warn" | "error";
+
+/**
+ * Structured log emitter. Writes JSON-structured lines to stdout/stderr
+ * and optionally forwards warnings/errors to Sentry as breadcrumbs.
+ *
+ * @param level  Severity level
+ * @param event  Machine-readable event name, e.g. "editorial.approval.recorded"
+ * @param context Optional key-value payload to include in the log entry
+ */
+export function log(
+  level: LogLevel,
+  event: string,
+  context?: Record<string, unknown>,
+): void {
+  const entry = {
+    ts: new Date().toISOString(),
+    level,
+    event,
+    env: process.env.NODE_ENV ?? "development",
+    ...(context ?? {}),
+  };
+
+  const line = JSON.stringify(entry);
+
+  if (level === "error" || level === "warn") {
+    process.stderr.write(line + "\n");
+  } else {
+    process.stdout.write(line + "\n");
+  }
+
+  // Forward warns and errors to Sentry as breadcrumbs (fire-and-forget)
+  if (level === "warn" || level === "error") {
+    getSentry()
+      .then((Sentry) => {
+        if (!Sentry) return;
+        Sentry.addBreadcrumb({ category: event, level: level as import("@sentry/nextjs").SeverityLevel, data: context });
+      })
+      .catch(() => {
+        // Swallow Sentry errors so logging never throws
+      });
+  }
+}

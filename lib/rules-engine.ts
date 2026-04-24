@@ -5,6 +5,9 @@
 
 import type { Law, RuleCondition, RuleGroup } from "./lexforge-data";
 
+// WS3: Version this engine so historical assessments remain reproducible.
+export const RULES_ENGINE_VERSION = "1.0.0";
+
 export type AssessmentInput = {
   // Company
   company_name?: string;
@@ -39,6 +42,27 @@ export type TriggeredObligation = {
   spanforge_controls?: string[];
 };
 
+// WS3: Evaluation trace — what each rule did and why the score was produced.
+export type RuleEvaluationEntry = {
+  ruleId: string;
+  ruleName: string;
+  weight: number;
+  matched: boolean;
+};
+
+export type EvaluationTrace = {
+  rulesEngineVersion: string;
+  totalWeight: number;
+  matchedWeight: number;
+  score: number;
+  rules: RuleEvaluationEntry[];
+  scoreBreakdown: {
+    matchedRuleCount: number;
+    totalRuleCount: number;
+    weightedPercentage: number;
+  };
+};
+
 export type AssessmentResult = {
   law_id: string;
   law_slug: string;
@@ -51,6 +75,8 @@ export type AssessmentResult = {
   rationale: string;
   triggered_rules: string[];
   triggered_obligations: TriggeredObligation[];
+  // WS3: Explainability
+  evaluation_trace: EvaluationTrace;
 };
 
 // ── Condition evaluator ─────────────────────────────────────────────────────
@@ -167,7 +193,7 @@ function selectObligations(
     }));
 }
 
-// ── Main engine ─────────────────────────────────────────────────────────────
+// ── Main engine ─────────────────────────────────────────────
 
 export function runRulesEngine(
   laws: Law[],
@@ -178,6 +204,7 @@ export function runRulesEngine(
       let totalWeight = 0;
       let matchedWeight = 0;
       const triggeredRules: string[] = [];
+      const ruleEvaluations: RuleEvaluationEntry[] = [];
 
       for (const rule of law.applicability_rules) {
         totalWeight += rule.weight;
@@ -186,10 +213,30 @@ export function runRulesEngine(
           matchedWeight += rule.weight;
           triggeredRules.push(rule.name);
         }
+        ruleEvaluations.push({
+          ruleId: rule.id,
+          ruleName: rule.name,
+          weight: rule.weight,
+          matched,
+        });
       }
 
       const score = totalWeight > 0 ? matchedWeight / totalWeight : 0;
       const status = scoreToStatus(score);
+
+      // WS3: Build evaluation trace for explainability and reproducibility
+      const evaluationTrace: EvaluationTrace = {
+        rulesEngineVersion: RULES_ENGINE_VERSION,
+        totalWeight,
+        matchedWeight,
+        score: Math.round(score * 1000) / 1000,
+        rules: ruleEvaluations,
+        scoreBreakdown: {
+          matchedRuleCount: ruleEvaluations.filter((r) => r.matched).length,
+          totalRuleCount: ruleEvaluations.length,
+          weightedPercentage: Math.round(score * 100),
+        },
+      };
 
       return {
         law_id: law.id,
@@ -203,6 +250,7 @@ export function runRulesEngine(
         rationale: buildRationale(law, score, triggeredRules, input),
         triggered_rules: triggeredRules,
         triggered_obligations: selectObligations(law, status),
+        evaluation_trace: evaluationTrace,
       } satisfies AssessmentResult;
     })
     .sort((a, b) => b.relevance_score - a.relevance_score);

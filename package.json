@@ -8,9 +8,19 @@
     "start": "node scripts/run-next.mjs start -p 3000",
     "lint": "next lint",
     "smoke": "node scripts/smoke-test.mjs",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:smoke": "vitest run tests/smoke",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "db:seed": "npx tsx prisma/seed.ts",
     "db:reset": "npx prisma migrate reset --force && npx tsx prisma/seed.ts",
-    "db:studio": "npx prisma studio"
+    "db:studio": "npx prisma studio",
+    "db:migrate": "npx prisma migrate deploy",
+    "make-admin": "npx tsx scripts/make-admin.ts",
+    "source:validate": "npx tsx scripts/source-validation.ts",
+    "source:validate:dry": "npx tsx scripts/source-validation.ts --dry-run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -23,11 +33,16 @@
     "react-dom": "19.1.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "22.15.21",
     "@types/react": "19.1.2",
     "@types/react-dom": "19.1.2",
+    "@vitest/coverage-v8": "^4.1.5",
+    "jsdom": "^29.0.2",
     "tsx": "^4.21.0",
-    "typescript": "5.8.3"
+    "typescript": "5.8.3",
+    "vitest": "^4.1.5"
   }
 }

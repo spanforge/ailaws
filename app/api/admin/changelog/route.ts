@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { captureException, log } from "@/lib/monitoring";
+import { sendRegulatoryAlertEmail } from "@/lib/alert-delivery";
 
 async function requireAdmin() {
   const session = await auth();
@@ -77,6 +79,63 @@ export async function POST(req: NextRequest) {
       changedAt: body.changedAt ? new Date(body.changedAt) : new Date(),
     },
   });
+
+  try {
+    const matchingPrefs = await prisma.alertPreference.findMany({
+      where: {
+        emailEnabled: true,
+        digestMode: "immediate",
+        OR: [
+          { lawSlug: law.slug },
+          ...(law.jurisdiction ? [{ jurisdiction: law.jurisdiction }] : []),
+        ],
+      },
+      include: {
+        user: {
+          select: { email: true, name: true },
+        },
+      },
+    });
+
+    const dedupedRecipients = new Map<string, { email: string; name: string | null }>();
+    for (const pref of matchingPrefs) {
+      if (pref.user.email) {
+        dedupedRecipients.set(pref.user.email, {
+          email: pref.user.email,
+          name: pref.user.name,
+        });
+      }
+    }
+
+    let deliveredCount = 0;
+    for (const recipient of dedupedRecipients.values()) {
+      const delivery = await sendRegulatoryAlertEmail({
+        email: recipient.email,
+        name: recipient.name,
+        lawShortTitle: law.shortTitle ?? law.title,
+        jurisdiction: law.jurisdiction,
+        changeType: entry.changeType,
+        summary: entry.summary,
+        details: entry.details,
+        changedAt: entry.changedAt,
+      });
+
+      if (delivery.delivered) {
+        deliveredCount += 1;
+      }
+    }
+
+    log("info", "alerts.changelog.notifications", {
+      lawSlug: law.slug,
+      recipientsMatched: dedupedRecipients.size,
+      deliveredCount,
+    });
+  } catch (error) {
+    await captureException(error, {
+      tags: { surface: "alerts", action: "deliver-change-notification" },
+      extra: { lawSlug: law.slug, entryId: entry.id },
+    });
+  }
 
   return NextResponse.json({ data: entry }, { status: 201 });
 }

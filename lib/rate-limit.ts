@@ -7,6 +7,7 @@ type RateLimitOptions = {
   key: string;
   limit: number;
   windowMs: number;
+  label?: string;
 };
 
 type RateLimitResult = {
@@ -18,12 +19,43 @@ type RateLimitResult = {
 
 declare global {
   var __lexforgeRateLimitStore: Map<string, RateLimitRecord> | undefined;
+  var __lexforgeRateLimitMetrics: Map<string, { attempts: number; blocked: number; lastSeenAt: number; maxLimit: number; windowMs: number }> | undefined;
 }
 
 const store = globalThis.__lexforgeRateLimitStore ?? new Map<string, RateLimitRecord>();
+const metrics = globalThis.__lexforgeRateLimitMetrics ?? new Map<string, { attempts: number; blocked: number; lastSeenAt: number; maxLimit: number; windowMs: number }>();
 
 if (!globalThis.__lexforgeRateLimitStore) {
   globalThis.__lexforgeRateLimitStore = store;
+}
+
+if (!globalThis.__lexforgeRateLimitMetrics) {
+  globalThis.__lexforgeRateLimitMetrics = metrics;
+}
+
+function getMetricLabel(input: RateLimitOptions) {
+  return input.label ?? (input.key.split(":").slice(0, 2).join(":") || input.key);
+}
+
+function recordMetric(input: RateLimitOptions, blocked: boolean, now: number) {
+  const label = getMetricLabel(input);
+  const current = metrics.get(label) ?? {
+    attempts: 0,
+    blocked: 0,
+    lastSeenAt: now,
+    maxLimit: input.limit,
+    windowMs: input.windowMs,
+  };
+
+  current.attempts += 1;
+  current.lastSeenAt = now;
+  current.maxLimit = input.limit;
+  current.windowMs = input.windowMs;
+  if (blocked) {
+    current.blocked += 1;
+  }
+
+  metrics.set(label, current);
 }
 
 function cleanupExpiredEntries(now: number) {
@@ -49,9 +81,10 @@ export function getRequestFingerprint(input: Request | Headers | null | undefine
   return `${ip}:${userAgent}`;
 }
 
-export function takeRateLimit({ key, limit, windowMs }: RateLimitOptions): RateLimitResult {
+export function takeRateLimit({ key, limit, windowMs, label }: RateLimitOptions): RateLimitResult {
   const now = Date.now();
   cleanupExpiredEntries(now);
+  const options = { key, limit, windowMs, label };
 
   const existing = store.get(key);
 
@@ -62,6 +95,7 @@ export function takeRateLimit({ key, limit, windowMs }: RateLimitOptions): RateL
     };
 
     store.set(key, nextRecord);
+  recordMetric(options, false, now);
 
     return {
       allowed: true,
@@ -72,6 +106,7 @@ export function takeRateLimit({ key, limit, windowMs }: RateLimitOptions): RateL
   }
 
   if (existing.count >= limit) {
+    recordMetric(options, true, now);
     return {
       allowed: false,
       remaining: 0,
@@ -82,6 +117,7 @@ export function takeRateLimit({ key, limit, windowMs }: RateLimitOptions): RateL
 
   existing.count += 1;
   store.set(key, existing);
+  recordMetric(options, false, now);
 
   return {
     allowed: true,
@@ -97,4 +133,10 @@ export function buildRateLimitHeaders(result: RateLimitResult) {
     "X-RateLimit-Remaining": String(result.remaining),
     "X-RateLimit-Reset": String(Math.ceil(result.resetAt / 1000)),
   };
+}
+
+export function getRateLimitMetricsSnapshot() {
+  return [...metrics.entries()]
+    .map(([label, metric]) => ({ label, ...metric }))
+    .sort((left, right) => right.blocked - left.blocked || right.attempts - left.attempts);
 }

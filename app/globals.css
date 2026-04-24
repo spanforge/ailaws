@@ -73,6 +73,66 @@ button {
   cursor: pointer;
 }
 
+/* ================================================================
+   ACCESSIBILITY — visible focus states for keyboard navigation
+   ================================================================ */
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* Remove the default outline only when not keyboard-focused */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Ensure links within nav get visible focus rings */
+.nav a:focus-visible,
+.subnav a:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Skip-to-content link for screen readers */
+.skip-to-content {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  z-index: -1;
+}
+
+.skip-to-content:focus {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  width: auto;
+  height: auto;
+  padding: 0.75rem 1.25rem;
+  background: var(--primary);
+  color: #fff;
+  font-weight: 600;
+  border-radius: var(--radius-xs);
+  z-index: 9999;
+  outline: none;
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 .shell {
   width: min(var(--max-width), calc(100% - 3rem));
   margin: 0 auto;
@@ -2132,6 +2192,61 @@ textarea:focus {
   border-radius: var(--radius-xs);
   padding: 0.6rem 0.85rem;
   margin: 0;
+}
+
+.auth-success {
+  font-size: 0.85rem;
+  color: var(--green);
+  background: rgba(42, 123, 98, 0.12);
+  border: 1px solid rgba(42, 123, 98, 0.2);
+  border-radius: var(--radius-xs);
+  padding: 0.6rem 0.85rem;
+  margin: 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.auth-providers {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.auth-provider-button {
+  width: 100%;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.auth-divider {
+  position: relative;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.auth-divider::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--line);
+}
+
+.auth-divider span {
+  position: relative;
+  padding: 0 0.65rem;
+  background: var(--surface);
+}
+
+.auth-note {
+  margin: 1rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.5;
 }
 
 .auth-switch {

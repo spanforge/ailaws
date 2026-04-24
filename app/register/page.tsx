@@ -1,19 +1,38 @@
 "use client";
 
-import { useState, FormEvent } from "react";
-import { signIn } from "next-auth/react";
+import { useEffect, useState, FormEvent } from "react";
+import { getProviders, signIn } from "next-auth/react";
 import Link from "next/link";
+
+type ProviderSummary = {
+  id: string;
+  name: string;
+};
 
 export default function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [verifyUrl, setVerifyUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [providers, setProviders] = useState<ProviderSummary[]>([]);
+
+  useEffect(() => {
+    getProviders().then((available) => {
+      const oauthProviders = Object.values(available ?? {})
+        .filter((provider) => provider.id !== "credentials")
+        .map((provider) => ({ id: provider.id, name: provider.name }));
+      setProviders(oauthProviders);
+    });
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    setNotice("");
+    setVerifyUrl(null);
     setLoading(true);
 
     const res = await fetch("/api/auth/register", {
@@ -29,15 +48,12 @@ export default function RegisterPage() {
       return;
     }
 
-    // Auto sign-in after registration
-    await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    const data = await res.json();
+
+    setNotice(data.message ?? "Account created. Verify your email before signing in.");
+    setVerifyUrl(data.verifyUrl ?? null);
 
     setLoading(false);
-    window.location.href = "/dashboard";
   }
 
   return (
@@ -50,6 +66,22 @@ export default function RegisterPage() {
 
         <h1 className="auth-heading">Create your account</h1>
         <p className="auth-sub">Free forever for solo use. No credit card required.</p>
+
+        {providers.length > 0 ? (
+          <div className="auth-providers">
+            {providers.map((provider) => (
+              <button
+                key={provider.id}
+                type="button"
+                className="button auth-provider-button"
+                onClick={() => signIn(provider.id, { callbackUrl: "/dashboard" })}
+              >
+                Continue with {provider.name}
+              </button>
+            ))}
+            <div className="auth-divider"><span>or create an account with email</span></div>
+          </div>
+        ) : null}
 
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="auth-field">
@@ -91,16 +123,24 @@ export default function RegisterPage() {
             />
           </div>
 
+          {notice && <p className="auth-success">{notice}</p>}
           {error && <p className="auth-error">{error}</p>}
+          {verifyUrl ? (
+            <a className="button auth-provider-button" href={verifyUrl}>
+              Open verification link
+            </a>
+          ) : null}
 
           <button type="submit" className="button button--primary" style={{width:"100%"}} disabled={loading}>
             {loading ? "Creating account…" : "Create account"}
           </button>
         </form>
 
+        <p className="auth-note">Google and Microsoft sign-in appear automatically when their client credentials are configured.</p>
+
         <p className="auth-switch">
           Already have an account?{" "}
-          <Link href="/login">Sign in</Link>
+          <Link href={notice ? "/login?registered=1" : "/login"}>Sign in</Link>
         </p>
       </div>
     </div>

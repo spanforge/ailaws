@@ -3,7 +3,19 @@
 import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { laws } from "@/lib/lexforge-data";
+import { laws, type Law } from "@/lib/lexforge-data";
+
+function getOverdueLaws(): Array<Law & { daysOverdue: number }> {
+  const now = Date.now();
+  return laws
+    .filter((law) => law.last_reviewed_at && law.freshness_sla_days)
+    .map((law) => {
+      const daysSince = (now - new Date(law.last_reviewed_at!).getTime()) / 86_400_000;
+      return { ...law, daysOverdue: Math.round(daysSince - law.freshness_sla_days!) };
+    })
+    .filter((law) => law.daysOverdue > 0)
+    .sort((a, b) => b.daysOverdue - a.daysOverdue);
+}
 
 const CHANGE_TYPES = [
   { value: "amendment", label: "Amendment" },
@@ -280,6 +292,50 @@ export default function AdminChangelogPage() {
             </div>
           </div>
         </div>
+
+        {/* Content review queue */}
+        {(() => {
+          const overdue = getOverdueLaws();
+          if (overdue.length === 0) return null;
+          return (
+            <div style={{ marginTop: "3rem" }}>
+              <h2 style={{ fontWeight: 700, fontSize: "1rem", marginBottom: "0.4rem" }}>
+                Content review queue
+              </h2>
+              <p style={{ color: "var(--muted)", fontSize: "0.875rem", marginBottom: "1rem" }}>
+                {overdue.length} law{overdue.length !== 1 ? "s" : ""} past their freshness SLA and need content review before re-publishing.
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                {overdue.map((law) => (
+                  <div
+                    key={law.slug}
+                    className="card"
+                    style={{ padding: "0.75rem 1rem", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", borderLeft: "4px solid var(--amber, #b45309)" }}
+                  >
+                    <div>
+                      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginBottom: "0.2rem" }}>
+                        {law.draft_status === "draft" && (
+                          <span style={{ fontSize: "0.7rem", padding: "0.1rem 0.4rem", borderRadius: "999px", background: "#f3f4f6", color: "#6b7280", border: "1px solid #d1d5db", fontWeight: 600 }}>
+                            Draft
+                          </span>
+                        )}
+                        <strong style={{ fontSize: "0.875rem" }}>{law.short_title}</strong>
+                        <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{law.jurisdiction}</span>
+                      </div>
+                      <p style={{ fontSize: "0.8rem", color: "var(--muted)", margin: 0 }}>
+                        Last reviewed {law.last_reviewed_at} · SLA {law.freshness_sla_days}d · <span style={{ color: "var(--amber, #b45309)", fontWeight: 600 }}>{law.daysOverdue}d overdue</span>
+                      </p>
+                    </div>
+                    <a href={`/laws/${law.slug}`} target="_blank" rel="noopener noreferrer" className="button" style={{ fontSize: "0.8rem", padding: "0.35rem 0.75rem", textDecoration: "none", flexShrink: 0 }}>
+                      View law →
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
       </div>
     </main>
   );

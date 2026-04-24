@@ -442,10 +442,31 @@ export default function DashboardPage() {
 
         {recommendedReruns.length > 0 ? (
           <section style={{ marginBottom: "2rem" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.9rem" }}>
-              <h2 style={{ margin: 0, color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.25rem" }}>Recommended reruns</h2>
-              <Link href="/assess" style={{ fontSize: "0.85rem", color: "var(--navy)", textDecoration: "underline" }}>
-                Reassess
+            <div
+              style={{
+                padding: "1rem 1.15rem",
+                borderRadius: "var(--radius)",
+                background: "rgba(244,162,97,0.07)",
+                border: "1px solid rgba(244,162,97,0.22)",
+                marginBottom: "0.85rem",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "1rem",
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <span style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#915a1e" }}>Action required</span>
+                <h2 style={{ margin: "0.2rem 0 0.25rem", color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.3rem", lineHeight: 1.15 }}>
+                  {recommendedReruns.length} assessment{recommendedReruns.length !== 1 ? "s" : ""} need a rerun
+                </h2>
+                <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>
+                  Law changes or age have invalidated these assessments. Re-run to get fresh verdict and updated evidence mapping.
+                </p>
+              </div>
+              <Link href="/assess" className="button button--primary" style={{ whiteSpace: "nowrap" }}>
+                Start new assessment →
               </Link>
             </div>
             <div className="stack">
@@ -455,9 +476,25 @@ export default function DashboardPage() {
                     <p style={{ margin: 0, fontWeight: 700, color: "var(--navy)", fontSize: "0.95rem" }}>{item.title}</p>
                     <p style={{ margin: "0.25rem 0 0", color: "var(--muted)", fontSize: "0.86rem" }}>{item.reason}</p>
                   </div>
-                  <Link href={`/assess/results/${item.id}`} className="button" style={{ whiteSpace: "nowrap" }}>
-                    Review
-                  </Link>
+                  <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
+                    <Link href={`/assess/results/${item.id}`} className="button" style={{ whiteSpace: "nowrap" }}>
+                      View results
+                    </Link>
+                    <button
+                      className="button button--primary"
+                      style={{ whiteSpace: "nowrap", fontSize: "0.84rem" }}
+                      onClick={() => {
+                        const found = assessments.find((a) => a.id === item.id);
+                        if (found) {
+                          const input = parseAssessmentInput(found);
+                          sessionStorage.setItem("compass_prefill", JSON.stringify(input));
+                        }
+                        window.location.href = "/assess";
+                      }}
+                    >
+                      Re-run →
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 const navLinks = [
   { href: "/explore", label: "Laws" },
   { href: "/assess", label: "Assess" },
+  { href: "/evidence", label: "Evidence" },
   { href: "/templates", label: "Templates" },
   { href: "/compare", label: "Compare" },
   { href: "/methodology", label: "Methodology" },

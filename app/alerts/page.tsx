@@ -16,6 +16,16 @@ type ChangeEntry = {
   changedAt: string;
 };
 
+type AssessmentMini = {
+  id: string;
+  name: string | null;
+  createdAt: string;
+  companyProfile: string;
+  productProfile: string;
+  technicalProfile: string;
+  results: Array<{ lawSlug: string; applicabilityStatus: string }>;
+};
+
 type AlertPref = {
   id: string;
   lawSlug: string | null;
@@ -56,6 +66,7 @@ export default function AlertsPage() {
   const [entries, setEntries] = useState<ChangeEntry[]>([]);
   const [prefs, setPrefs] = useState<AlertPref[]>([]);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [assessments, setAssessments] = useState<AssessmentMini[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [addType, setAddType] = useState<"law" | "jurisdiction">("jurisdiction");
@@ -67,9 +78,10 @@ export default function AlertsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [alertsResponse, organizationsResponse] = await Promise.all([
+    const [alertsResponse, organizationsResponse, assessmentsResponse] = await Promise.all([
       fetch("/api/alerts"),
       fetch("/api/organizations").catch(() => null),
+      fetch("/api/assessments").catch(() => null),
     ]);
     if (alertsResponse.ok) {
       const { data, prefs: p } = await alertsResponse.json();
@@ -79,6 +91,10 @@ export default function AlertsPage() {
     if (organizationsResponse && organizationsResponse.ok) {
       const { data } = await organizationsResponse.json();
       setOrganizations(data ?? []);
+    }
+    if (assessmentsResponse && assessmentsResponse.ok) {
+      const { data } = await assessmentsResponse.json();
+      setAssessments(data ?? []);
     }
     setLoading(false);
   }, []);
@@ -272,6 +288,28 @@ export default function AlertsPage() {
                     {entry.details ? (
                       <p style={{ fontSize: "0.875rem", color: "var(--muted)", lineHeight: 1.55 }}>{entry.details}</p>
                     ) : null}
+                    <div style={{ marginTop: "0.75rem" }}>
+                      <button
+                        className="button"
+                        style={{ fontSize: "0.8rem" }}
+                        onClick={() => {
+                          const affected = assessments.find((a) =>
+                            a.results.some((r) => r.lawSlug === entry.lawSlug && (r.applicabilityStatus === "likely_applies" || r.applicabilityStatus === "may_apply"))
+                          );
+                          if (affected) {
+                            const input = {
+                              ...JSON.parse(affected.companyProfile ?? "{}"),
+                              ...JSON.parse(affected.productProfile ?? "{}"),
+                              ...JSON.parse(affected.technicalProfile ?? "{}"),
+                            };
+                            sessionStorage.setItem("compass_prefill", JSON.stringify(input));
+                          }
+                          window.location.href = "/assess";
+                        }}
+                      >
+                        Re-run assessment for {entry.lawShortTitle} →
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

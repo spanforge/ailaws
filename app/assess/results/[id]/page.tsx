@@ -9,10 +9,14 @@ import {
   TEMPLATE_LIBRARY,
   buildActionPlan,
   buildAssessmentDeltaSummary,
+  buildExecutiveVerdict,
+  buildRecommendedControls,
   enrichAssessmentResults,
   getActionTimelineLabel,
+  getObligationDueDateSuggestion,
   getProductPresetById,
   type ActionPlanItem,
+  type ExecutiveVerdict,
 } from "@/lib/smb";
 import {
   buildClauseGapReport,
@@ -46,6 +50,7 @@ type AssessmentRecord = {
   companyProfile: string;
   productProfile: string;
   technicalProfile: string;
+  reviewStatus?: string;
   checklists?: Checklist[];
   results: Array<{
     lawSlug: string;
@@ -214,8 +219,10 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
   const [checklist, setChecklist] = useState<Checklist | null>(null);
   const [loadingChecklist, setLoadingChecklist] = useState(false);
   const [itemStatuses, setItemStatuses] = useState<Record<string, ChecklistItem["status"]>>({});
-  const [activeTab, setActiveTab] = useState<"results" | "actions" | "checklist" | "gaps" | "simulate">("results");
+  const [activeTab, setActiveTab] = useState<"verdict" | "results" | "actions" | "checklist" | "gaps" | "simulate">("verdict");
+  const [showExportMenu, setShowExportMenu] = useState(false);
   const [assessmentRecord, setAssessmentRecord] = useState<AssessmentRecord | null>(null);
+  const [reviewStatus, setReviewStatus] = useState<string>("draft");
   const [previousResults, setPreviousResults] = useState<AssessmentResult[] | null>(null);
   const [founderMode, setFounderMode] = useState(false);
   const [alerts, setAlerts] = useState<ChangeEntry[]>([]);
@@ -262,6 +269,7 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
         setSimulationInput(parsedInput);
         setResults(runRulesEngine(laws, parsedInput));
         setAssessmentRecord(match);
+        setReviewStatus(match.reviewStatus ?? "draft");
 
         const persistedChecklist = match.checklists?.[0] ?? null;
         setChecklist(persistedChecklist);
@@ -358,6 +366,17 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
     })),
   });
   const simulationDelta = simulationInput ? buildSimulationDeltaFromResults(input, simulationInput, results) : null;
+  const executiveVerdict = buildExecutiveVerdict(results, input);
+  const recommendedControls = buildRecommendedControls(results);
+  const assessmentAgeDays = assessmentRecord?.createdAt
+    ? Math.floor((Date.now() - new Date(assessmentRecord.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+    : 0;
+  const isStale = assessmentAgeDays > 30;
+  const hasLawChangeSinceAssessment = alerts.some((alert) => {
+    const alertDate = new Date(alert.changedAt).getTime();
+    const assessmentDate = assessmentRecord?.createdAt ? new Date(assessmentRecord.createdAt).getTime() : 0;
+    return alertDate > assessmentDate;
+  });
 
   return (
     <main className="page">
@@ -388,30 +407,124 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
             >
               Download action plan CSV
             </button>
-            <a href={`/assess/results/${id}/print`} target="_blank" rel="noopener noreferrer" className="button" style={{ fontSize: "0.85rem", textDecoration: "none" }}>
-              Export PDF
-            </a>
+            <div style={{ position: "relative", display: "inline-block" }}>
+              <button className="button" style={{ fontSize: "0.85rem" }} onClick={() => setShowExportMenu((v) => !v)}>
+                Export PDF ▾
+              </button>
+              {showExportMenu && (
+                <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 50, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: "var(--radius-sm)", boxShadow: "var(--shadow)", minWidth: "220px", marginTop: "0.25rem" }}>
+                  {[
+                    { type: "standard", label: "Full Compliance Report" },
+                    { type: "governance", label: "AI Governance Summary" },
+                    { type: "applicability", label: "Regulatory Applicability Memo" },
+                    { type: "evidence", label: "Evidence Checklist" },
+                    { type: "trust", label: "Customer Trust Packet" },
+                  ].map(({ type, label }) => (
+                    <a
+                      key={type}
+                      href={`/assess/results/${id}/print?type=${type}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ display: "block", padding: "0.5rem 0.85rem", fontSize: "0.82rem", color: "var(--text)", textDecoration: "none", borderBottom: "1px solid var(--line)" }}
+                      onClick={() => setShowExportMenu(false)}
+                    >
+                      {label}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
             <button className="button" style={{ fontSize: "0.875rem" }} onClick={() => router.push("/assess")}>
               Edit and re-run
             </button>
           </div>
         </div>
 
-        <h1
-          style={{
-            margin: "1rem 0 0.4rem",
-            color: "var(--navy)",
-            fontFamily: "var(--font-heading)",
-            fontSize: "clamp(1.8rem, 3.5vw, 2.8rem)",
-            lineHeight: 1.08,
-            letterSpacing: "-0.03em",
-          }}
-        >
-          Your compliance analysis
-        </h1>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", margin: "1rem 0 0.4rem" }}>
+          <h1
+            style={{
+              margin: 0,
+              color: "var(--navy)",
+              fontFamily: "var(--font-heading)",
+              fontSize: "clamp(1.8rem, 3.5vw, 2.8rem)",
+              lineHeight: 1.08,
+              letterSpacing: "-0.03em",
+            }}
+          >
+            Your compliance analysis
+          </h1>
+          {assessmentRecord ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
+              <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Status
+              </label>
+              <select
+                value={reviewStatus}
+                onChange={async (e) => {
+                  const next = e.target.value;
+                  setReviewStatus(next);
+                  await fetch(`/api/assessments/${assessmentRecord.id}/review-status`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ reviewStatus: next }),
+                  });
+                }}
+                style={{ fontSize: "0.85rem", borderRadius: "10px", padding: "0.3rem 0.65rem" }}
+              >
+                <option value="draft">Draft</option>
+                <option value="reviewed">Reviewed</option>
+                <option value="approved">Approved</option>
+              </select>
+            </div>
+          ) : null}
+        </div>
         <p style={{ color: "var(--muted)", margin: "0 0 1.5rem" }}>
-          Founder-readable results, clause-level gap tracking, trust posture, and drift signals in one working surface.
+          Executive verdict, clause-level gap tracking, trust posture, and drift signals in one working surface.
         </p>
+
+        {(isStale || hasLawChangeSinceAssessment) ? (
+          <div
+            style={{
+              marginBottom: "1.25rem",
+              padding: "1rem 1.15rem",
+              borderRadius: "var(--radius)",
+              background: isStale ? "rgba(244,162,97,0.12)" : "rgba(230,57,70,0.08)",
+              border: `1px solid ${isStale ? "rgba(244,162,97,0.3)" : "rgba(230,57,70,0.2)"}`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "1rem",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <p style={{ margin: "0 0 0.2rem", fontWeight: 700, color: "var(--navy)", fontSize: "0.95rem" }}>
+                {isStale && hasLawChangeSinceAssessment
+                  ? `Assessment is ${assessmentAgeDays} days old and tracked laws have changed`
+                  : isStale
+                    ? `Assessment is ${assessmentAgeDays} days old — consider a reassessment`
+                    : "Tracked laws have changed since this assessment was run"}
+              </p>
+              <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.88rem" }}>
+                {isStale
+                  ? "Conclusions may be stale if your product profile or regulatory landscape has shifted."
+                  : "Some conclusions from this run may no longer reflect the current state of the law."}
+              </p>
+            </div>
+            <button
+              className="button"
+              style={{ flexShrink: 0 }}
+              onClick={() => {
+                if (input) {
+                  sessionStorage.setItem("assessment-draft", JSON.stringify(input));
+                }
+                router.push("/assess");
+              }}
+            >
+              Re-run assessment →
+            </button>
+          </div>
+        ) : null}
 
         <div className="content-card" style={{ marginBottom: "1.25rem", padding: "1rem 1.1rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
@@ -600,6 +713,9 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
         </div>
 
         <div className="subnav" style={{ marginBottom: "1.25rem", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+          <button className={`button ${activeTab === "verdict" ? "button--primary" : ""}`} onClick={() => setActiveTab("verdict")}>
+            Executive verdict
+          </button>
           <button className={`button ${activeTab === "results" ? "button--primary" : ""}`} onClick={() => setActiveTab("results")}>
             Results ({enriched.length})
           </button>
@@ -626,6 +742,20 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
             {loadingChecklist ? "Generating..." : checklist ? `Checklist (${checklist.items.length})` : "Generate checklist"}
           </button>
         </div>
+
+        {activeTab === "verdict" ? (
+          <ExecutiveVerdictView
+            verdict={executiveVerdict}
+            applicable={applicable}
+            mayApply={mayApply}
+            actionPlan={actionPlan}
+            recommendedControls={recommendedControls}
+            onRunAssessment={() => {
+              if (input) sessionStorage.setItem("assessment-draft", JSON.stringify(input));
+              router.push("/assess");
+            }}
+          />
+        ) : null}
 
         {activeTab === "results" ? (
           <div className="stack">
@@ -703,6 +833,15 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
                                       </div>
                                       <strong style={{ color: "var(--navy)" }}>{obligation.title}</strong>
                                       <p style={{ marginBottom: 0 }}>{obligation.action_required}</p>
+                                      {obligation.spanforge_controls && obligation.spanforge_controls.length > 0 ? (
+                                        <div style={{ marginTop: "0.4rem", display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+                                          {obligation.spanforge_controls.map((ctrl) => (
+                                            <span key={ctrl} style={{ fontSize: "0.7rem", padding: "0.12rem 0.45rem", borderRadius: "999px", background: "var(--primary-light, #e8f0fe)", color: "var(--navy)", border: "1px solid var(--primary, #1a56db)", fontWeight: 600 }}>
+                                              {ctrl}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      ) : null}
                                     </div>
                                   ))}
                                 </div>
@@ -787,6 +926,175 @@ function ResultLabel({ title, body }: { title: string; body: string }) {
         {title}
       </p>
       <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.9rem", lineHeight: 1.5 }}>{body}</p>
+    </div>
+  );
+}
+
+function ExecutiveVerdictView({
+  verdict,
+  applicable,
+  mayApply,
+  actionPlan,
+  recommendedControls,
+  onRunAssessment,
+}: {
+  verdict: ExecutiveVerdict;
+  applicable: ReturnType<typeof enrichAssessmentResults>;
+  mayApply: ReturnType<typeof enrichAssessmentResults>;
+  actionPlan: ReturnType<typeof buildActionPlan>;
+  recommendedControls: ReturnType<typeof buildRecommendedControls>;
+  onRunAssessment: () => void;
+}) {
+  const verdictColor =
+    verdict.status === "proceed" ? "var(--green)" :
+    verdict.status === "action_required" ? "#915a1e" :
+    "var(--red)";
+  const verdictBg =
+    verdict.status === "proceed" ? "rgba(42,123,98,0.07)" :
+    verdict.status === "action_required" ? "rgba(244,162,97,0.08)" :
+    "rgba(230,57,70,0.07)";
+
+  return (
+    <div className="stack">
+      <div className="content-card" style={{ background: verdictBg, border: `1px solid ${verdictColor}33` }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.65rem", marginBottom: "0.6rem", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", padding: "0.2rem 0.6rem", borderRadius: "999px", background: `${verdictColor}22`, color: verdictColor }}>
+                {verdict.label}
+              </span>
+              <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>Executive verdict</span>
+            </div>
+            <h2 style={{ margin: "0 0 0.6rem", color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.5rem", lineHeight: 1.15 }}>
+              {verdict.headline}
+            </h2>
+            <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.95rem", lineHeight: 1.65, maxWidth: "72ch" }}>
+              {verdict.summary}
+            </p>
+          </div>
+          <button className="button" onClick={onRunAssessment} style={{ flexShrink: 0 }}>
+            Re-run assessment
+          </button>
+        </div>
+
+        {verdict.ownerRecommendation ? (
+          <div style={{ marginTop: "1rem", paddingTop: "0.85rem", borderTop: `1px solid ${verdictColor}22` }}>
+            <span style={{ fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+              Recommended owner
+            </span>
+            <p style={{ margin: "0.2rem 0 0", color: "var(--navy)", fontSize: "0.92rem", fontWeight: 600 }}>
+              {verdict.ownerRecommendation}
+            </p>
+          </div>
+        ) : null}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "1rem" }}>
+        <div className="content-card">
+          <p style={{ margin: "0 0 0.5rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+            Top risks identified
+          </p>
+          {verdict.topRisks.length > 0 ? (
+            <div className="stack">
+              {verdict.topRisks.map((risk, index) => (
+                <div key={index} style={{ display: "flex", gap: "0.6rem", alignItems: "flex-start" }}>
+                  <span style={{ width: "1.4rem", height: "1.4rem", borderRadius: "999px", background: "rgba(230,57,70,0.1)", color: "var(--red)", fontSize: "0.7rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: "0.05rem" }}>{index + 1}</span>
+                  <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.9rem", lineHeight: 1.5 }}>{risk}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>No significant risks identified for this profile.</p>
+          )}
+        </div>
+
+        <div className="content-card">
+          <p style={{ margin: "0 0 0.5rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+            Immediate actions required
+          </p>
+          {verdict.immediateActions.length > 0 ? (
+            <div className="stack">
+              {verdict.immediateActions.map((action, index) => (
+                <div key={index} style={{ display: "flex", gap: "0.6rem", alignItems: "flex-start" }}>
+                  <span style={{ width: "1.4rem", height: "1.4rem", borderRadius: "999px", background: "rgba(244,162,97,0.12)", color: "#915a1e", fontSize: "0.7rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: "0.05rem" }}>{index + 1}</span>
+                  <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.9rem", lineHeight: 1.5 }}>{action}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>No immediate actions flagged for this profile.</p>
+          )}
+        </div>
+      </div>
+
+      {applicable.length > 0 ? (
+        <div className="content-card">
+          <p style={{ margin: "0 0 0.5rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+            Applicable regimes — why they apply
+          </p>
+          <div className="stack">
+            {applicable.concat(mayApply).slice(0, 5).map((result) => (
+              <div key={result.law_id} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "0.75rem", alignItems: "start", padding: "0.9rem", borderRadius: "14px", background: "rgba(16,32,48,0.03)", border: "1px solid rgba(16,32,48,0.07)" }}>
+                <div>
+                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginBottom: "0.3rem" }}>
+                    <span style={{ fontSize: "0.78rem", fontWeight: 700, padding: "0.2rem 0.55rem", borderRadius: "999px", background: result.applicability_status === "likely_applies" ? "rgba(230,57,70,0.1)" : "rgba(244,162,97,0.12)", color: result.applicability_status === "likely_applies" ? "var(--red)" : "#915a1e" }}>
+                      {result.applicability_status === "likely_applies" ? "Likely applies" : "May apply"}
+                    </span>
+                    <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{result.jurisdiction}</span>
+                  </div>
+                  <strong style={{ color: "var(--navy)", fontSize: "0.95rem" }}>{result.law_short_title}</strong>
+                  <p style={{ margin: "0.3rem 0 0", color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.5 }}>{result.whyYouMatched}</p>
+                  {result.triggered_obligations.slice(0, 2).map((ob) => (
+                    <div key={ob.id} style={{ marginTop: "0.5rem", display: "flex", gap: "0.45rem", alignItems: "baseline" }}>
+                      <span style={{ fontSize: "0.72rem", fontWeight: 700, color: PRIORITY_COLORS[ob.priority] ?? "var(--navy)" }}>{ob.priority.toUpperCase()}</span>
+                      <span style={{ fontSize: "0.84rem", color: "var(--navy)" }}>{ob.title}</span>
+                      <span style={{ fontSize: "0.78rem", color: "var(--muted)", marginLeft: "auto" }}>{getObligationDueDateSuggestion(ob.priority)}</span>
+                    </div>
+                  ))}
+                </div>
+                <strong style={{ fontFamily: "var(--font-heading)", fontSize: "1.5rem", color: "var(--navy)", textAlign: "right" }}>
+                  {Math.round(result.relevance_score * 100)}%
+                </strong>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {recommendedControls.length > 0 ? (
+        <div className="content-card">
+          <p style={{ margin: "0 0 0.5rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+            Recommended technical controls
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "0.85rem" }}>
+            {recommendedControls.map((group) => (
+              <div key={group.category} style={{ padding: "0.9rem", borderRadius: "14px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.08)" }}>
+                <p style={{ margin: "0 0 0.45rem", fontSize: "0.8rem", fontWeight: 700, color: "var(--primary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  {group.category}
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+                  {group.controls.map((control) => (
+                    <div key={control} style={{ display: "flex", gap: "0.45rem", alignItems: "flex-start" }}>
+                      <span style={{ color: "var(--green)", fontWeight: 700, lineHeight: 1.4 }}>✓</span>
+                      <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.88rem", lineHeight: 1.45 }}>{control}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="content-card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+        <div>
+          <p style={{ margin: "0 0 0.25rem", fontWeight: 700, color: "var(--navy)" }}>Ready to hand this to procurement or counsel?</p>
+          <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>Export the evidence package to get matched laws, clause coverage, trust posture, drift triggers, and attestation metadata in one file.</p>
+        </div>
+        <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+          <Link href="/templates" className="button">Browse export templates</Link>
+        </div>
+      </div>
     </div>
   );
 }

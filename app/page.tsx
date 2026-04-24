@@ -3,31 +3,37 @@ import { laws } from "@/lib/lexforge-data";
 import { TEMPLATE_LIBRARY } from "@/lib/smb";
 
 export const metadata = {
-  title: "AI Compliance Evidence Workspace for Startups and SMBs - Spanforge Compass",
+  title: "AI Law Evidence-Readiness Workspace for B2B SaaS Teams - Spanforge Compass",
   description:
-    "Find which AI laws apply to your product, what to do next, and what evidence package your team can export today.",
+    "Compass helps B2B SaaS teams shipping AI into enterprise procurement determine applicability, produce exportable evidence, and reassess as regulation changes.",
 };
 
-const useCases = [
+const coreJobs = [
   {
-    title: "AI SaaS selling into the EU",
-    body: "Figure out whether the EU AI Act, GDPR, and product-liability rules matter before a customer asks.",
+    icon: "📋",
+    number: "01",
+    title: "Pre-launch applicability assessment",
+    body: "Determine exactly which AI laws apply to your product before a customer, counsel, or regulator asks. Leave with a prioritized action list, not a reading list.",
   },
   {
-    title: "Hiring or healthcare workflows",
-    body: "Spot higher-risk use cases early, assign owners, and leave with a concrete remediation list instead of raw citations.",
+    icon: "🤝",
+    number: "02",
+    title: "Customer and procurement support",
+    body: "Export a regulatory applicability memo, evidence checklist, and trust packet your team can hand directly to enterprise security reviews and vendor questionnaires.",
   },
   {
-    title: "Founder-led launch readiness",
-    body: "Turn one assessment into a founder-ready PDF, a prioritized action plan, and an exportable evidence package.",
+    icon: "🔄",
+    number: "03",
+    title: "Change-triggered reassessment",
+    body: "Track which laws are changing, see which conclusions are now stale, and run a targeted reassessment before a new launch cycle or audit window.",
   },
 ];
 
 const trustPoints = [
-  "Deterministic rules engine with source-linked results",
-  "Founder-readable summaries before legal detail",
-  "Evidence package export for counsel, buyers, and internal review",
-  "Review dates and freshness cues surfaced across key pages",
+  { icon: "🔗", label: "Deterministic", point: "Rules engine with source-linked results — not LLM guesses" },
+  { icon: "📖", label: "Decision-grade", point: "Executive verdicts and obligation breakdowns ready for internal reviews" },
+  { icon: "📦", label: "Evidence-ready", point: "Export evidence packages with sources, checklist state, and attestation metadata" },
+  { icon: "🔄", label: "Drift-aware", point: "Reassessment triggers fire when tracked laws change or assessments go stale" },
 ];
 
 export default function HomePage() {
@@ -48,27 +54,31 @@ export default function HomePage() {
           }}
         >
           <div>
-            <p className="eyebrow">For founders, startups, and SMB teams</p>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.65rem", flexWrap: "wrap", marginBottom: "0.6rem" }}>
+              <p className="eyebrow" style={{ margin: 0 }}>Legal intelligence for AI teams</p>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.2rem 0.6rem", borderRadius: "999px", background: "var(--primary-light)", color: "var(--primary)", fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.04em" }}>
+                Part of SpanForge
+              </span>
+            </div>
             <h1
               style={{
-                margin: "0.3rem 0 0.75rem",
+                margin: "0 0 0.75rem",
                 color: "var(--navy)",
                 fontFamily: "var(--font-heading)",
                 fontSize: "clamp(2rem, 5vw, 4rem)",
                 lineHeight: 0.98,
                 letterSpacing: "-0.04em",
-                maxWidth: "13ch",
+                maxWidth: "16ch",
               }}
             >
-              AI compliance with evidence, not just answers
+              The evidence-readiness workspace for AI launches
             </h1>
-            <p style={{ color: "var(--muted)", fontSize: "1.05rem", maxWidth: "58ch", lineHeight: 1.6, margin: 0 }}>
-              Spanforge Compass helps small teams figure out which AI laws apply, what to do this week, and what evidence they can
-              hand to customers, cofounders, counsel, or procurement reviewers.
+            <p style={{ color: "var(--muted)", fontSize: "1.05rem", maxWidth: "56ch", lineHeight: 1.6, margin: 0 }}>
+              Compass helps B2B SaaS teams shipping AI into enterprise procurement understand which laws apply, produce exportable evidence, and stay current as regulation changes — without waiting for legal.
             </p>
             <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginTop: "1.25rem" }}>
               <Link href="/assess" className="button button--primary" style={{ fontSize: "0.95rem", padding: "0.75rem 1.2rem" }}>
-                Start free assessment {"->"}
+                Start free assessment →
               </Link>
               <Link href="/methodology" className="button" style={{ fontSize: "0.95rem", padding: "0.75rem 1.2rem" }}>
                 View methodology
@@ -77,12 +87,15 @@ export default function HomePage() {
           </div>
           <div className="content-card" style={{ padding: "1.2rem 1.25rem", alignSelf: "stretch" }}>
             <p style={{ margin: "0 0 0.35rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
-              What you leave with
+              Built for one buyer
+            </p>
+            <p style={{ margin: "0 0 0.85rem", color: "var(--navy)", fontSize: "0.92rem", fontWeight: 600, lineHeight: 1.45 }}>
+              B2B SaaS teams shipping AI into enterprise procurement and regulated customer environments.
             </p>
             <div className="stack">
-              <SnapshotItem title="Top laws" body="Likely-applicable and may-apply laws explained in plain English." />
-              <SnapshotItem title="Action plan" body="Top urgent actions grouped by this week, this month, and later." />
-              <SnapshotItem title="Evidence package" body="Structured export with sources, checklist status, and attestation metadata." />
+              <SnapshotItem title="Assess" body="Determine which AI laws apply before launch or a customer questionnaire arrives." />
+              <SnapshotItem title="Prove" body="Export evidence packages with sources, clause coverage, and attestation metadata." />
+              <SnapshotItem title="Stay current" body="Reassess when tracked laws change — drift detection is built into every report." />
             </div>
           </div>
         </section>
@@ -97,7 +110,7 @@ export default function HomePage() {
             <span>In force / enacted</span>
           </div>
           <div className="stat-card">
-            <strong style={{ color: "#915a1e" }}>{proposed}</strong>
+            <strong style={{ color: "var(--amber)" }}>{proposed}</strong>
             <span>Proposed / draft</span>
           </div>
           <div className="stat-card">
@@ -107,62 +120,76 @@ export default function HomePage() {
         </div>
 
         <section style={{ marginBottom: "2.5rem" }}>
+          <p className="kicker" style={{ color: "var(--primary)", marginBottom: "0.55rem" }}>01 &middot; Core jobs</p>
           <div className="section-heading">
             <h2 style={{ margin: 0, fontFamily: "var(--font-heading)", color: "var(--navy)", fontSize: "1.45rem" }}>
-              Built for high-intent SMB use cases
+              Three jobs Compass is built to do
             </h2>
           </div>
           <div className="card-grid">
-            {useCases.map((item) => (
+            {coreJobs.map((item) => (
               <div key={item.title} className="content-card">
-                <h3 style={{ margin: "0 0 0.45rem", fontSize: "1.18rem", color: "var(--navy)" }}>{item.title}</h3>
-                <p style={{ color: "var(--muted)", fontSize: "0.94rem", margin: 0 }}>{item.body}</p>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.65rem", marginBottom: "0.75rem" }}>
+                  <span style={{ fontSize: "1.5rem", lineHeight: 1 }}>{item.icon}</span>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--primary)", letterSpacing: "0.06em", textTransform: "uppercase" }}>{item.number}</span>
+                </div>
+                <h3 style={{ margin: "0 0 0.45rem", fontSize: "1.05rem", color: "var(--navy)", lineHeight: 1.3 }}>{item.title}</h3>
+                <p style={{ color: "var(--muted)", fontSize: "0.94rem", margin: 0, lineHeight: 1.55 }}>{item.body}</p>
               </div>
             ))}
           </div>
         </section>
 
         <section style={{ marginBottom: "2.5rem" }}>
+          <p className="kicker" style={{ color: "var(--green)", marginBottom: "0.55rem" }}>02 &middot; Why trust it</p>
           <div className="section-heading">
             <h2 style={{ margin: 0, fontFamily: "var(--font-heading)", color: "var(--navy)", fontSize: "1.45rem" }}>
               Why teams trust the output
             </h2>
-            <Link href="/methodology" style={{ fontSize: "0.9rem", color: "var(--blue)" }}>
-              Read methodology {"->"}
+            <Link href="/methodology" className="text-link" style={{ fontSize: "0.9rem" }}>
+              Read methodology →
             </Link>
           </div>
           <div className="card-grid">
-            {trustPoints.map((point) => (
-              <div key={point} className="content-card" style={{ padding: "1.1rem 1.2rem" }}>
-                <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.95rem", fontWeight: 700 }}>{point}</p>
+            {trustPoints.map((tp) => (
+              <div key={tp.point} className="content-card" style={{ padding: "1.1rem 1.2rem", display: "flex", gap: "0.85rem", alignItems: "flex-start" }}>
+                <span style={{ fontSize: "1.4rem", lineHeight: 1, flexShrink: 0, marginTop: "0.1rem" }}>{tp.icon}</span>
+                <div>
+                  <p className="kicker" style={{ marginBottom: "0.25rem" }}>{tp.label}</p>
+                  <p style={{ margin: 0, fontSize: "0.95rem", fontWeight: 600, lineHeight: 1.45 }}>{tp.point}</p>
+                </div>
               </div>
             ))}
           </div>
         </section>
 
         <section style={{ marginBottom: "2.5rem" }}>
+          <p className="kicker" style={{ color: "var(--amber)", marginBottom: "0.55rem" }}>03 &middot; Get started</p>
           <div className="section-heading">
             <h2 style={{ margin: 0, fontFamily: "var(--font-heading)", color: "var(--navy)", fontSize: "1.45rem" }}>
-              Start with action, not research
+              Start with applicability, leave with evidence
             </h2>
           </div>
           <div className="card-grid">
             <ActionCard
+              icon="📋"
               title="Run the assessment"
-              body="Answer a short wizard and get prioritized AI law exposure in plain English."
+              body="Answer a short wizard. Get an executive verdict, top obligations, owner hints, and a prioritized action plan — all in one pass."
               href="/assess"
               cta="Start assessment"
               primary
             />
             <ActionCard
-              title="Download templates"
-              body="Get AI usage policies, transparency notices, diligence checklists, and launch-readiness docs."
+              icon="📄"
+              title="Export for procurement"
+              body="AI governance summary, regulatory applicability memo, evidence checklist, and customer-facing trust packet — ready to hand over."
               href="/templates"
               cta="Open templates"
             />
             <ActionCard
+              icon="🔍"
               title="Inspect methodology"
-              body="See how Spanforge Compass evaluates exposure, where human review still matters, and how evidence exports are assembled."
+              body="See how Compass evaluates exposure, where human review still matters, and how evidence exports are assembled for enterprise use."
               href="/methodology"
               cta="Review methodology"
             />
@@ -175,20 +202,22 @@ export default function HomePage() {
 
 function SnapshotItem({ title, body }: { title: string; body: string }) {
   return (
-    <div style={{ padding: "0.85rem 0.95rem", borderRadius: "14px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
-      <p style={{ margin: "0 0 0.25rem", color: "var(--navy)", fontSize: "0.92rem", fontWeight: 700 }}>{title}</p>
+    <div style={{ padding: "0.85rem 0.95rem", borderRadius: "var(--radius-xs)", background: "var(--surface-alt)", border: "1px solid var(--line)" }}>
+      <p style={{ margin: "0 0 0.25rem", fontSize: "0.92rem", fontWeight: 700 }}>{title}</p>
       <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.5 }}>{body}</p>
     </div>
   );
 }
 
 function ActionCard({
+  icon,
   title,
   body,
   href,
   cta,
   primary,
 }: {
+  icon: string;
   title: string;
   body: string;
   href: string;
@@ -197,14 +226,15 @@ function ActionCard({
 }) {
   return (
     <div className="content-card">
-      <h3 style={{ margin: "0 0 0.4rem", fontSize: "1.25rem", color: "var(--navy)" }}>{title}</h3>
+      <span style={{ fontSize: "1.75rem", lineHeight: 1, display: "block", marginBottom: "0.75rem" }}>{icon}</span>
+      <h3 style={{ margin: "0 0 0.4rem", fontSize: "1.15rem", color: "var(--navy)" }}>{title}</h3>
       <p style={{ color: "var(--muted)", fontSize: "0.93rem", margin: 0 }}>{body}</p>
       <Link
         href={href}
         className={`button ${primary ? "button--primary" : ""}`}
         style={{ marginTop: "1rem", fontSize: "0.9rem", padding: "0.6rem 1.1rem" }}
       >
-        {cta} {"->"}
+        {cta} →
       </Link>
     </div>
   );

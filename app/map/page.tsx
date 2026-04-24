@@ -5,11 +5,19 @@ import Link from "next/link";
 import { laws, JURISDICTIONS } from "@/lib/lexforge-data";
 
 const STATUS_COLOR: Record<string, string> = {
-  in_force: "#1d6e52",
-  enacted: "#1a56db",
-  proposed: "#b45309",
-  draft: "#6b7280",
-  repealed: "#9b1c1c",
+  in_force: "var(--green)",
+  enacted: "var(--primary)",
+  proposed: "var(--amber)",
+  draft: "var(--muted)",
+  repealed: "var(--red)",
+};
+
+const STATUS_BG: Record<string, string> = {
+  in_force: "var(--green-light)",
+  enacted: "var(--primary-light)",
+  proposed: "var(--amber-light)",
+  draft: "var(--surface-alt)",
+  repealed: "var(--red-light)",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -56,7 +64,8 @@ export default function MapPage() {
 
         {/* Header */}
         <div style={{ marginBottom: "2rem" }}>
-          <h1 style={{ fontSize: "clamp(1.6rem, 3vw, 2.4rem)", fontWeight: 800, color: "var(--navy)", marginBottom: "0.4rem" }}>
+          <p className="kicker">Jurisdictions</p>
+          <h1 style={{ margin: "0.4rem 0 0.5rem", fontFamily: "var(--font-heading)", fontSize: "clamp(1.8rem, 3.5vw, 2.8rem)", lineHeight: 1.08, letterSpacing: "-0.03em" }}>
             Jurisdiction Explorer
           </h1>
           <p style={{ color: "var(--muted)", maxWidth: "55ch" }}>
@@ -87,8 +96,8 @@ export default function MapPage() {
                         style={{
                           padding: "0.55rem 1rem",
                           borderRadius: "10px",
-                          border: `2px solid ${isSelected ? "var(--navy)" : "var(--border)"}`,
-                          background: isSelected ? "var(--navy)" : "white",
+                          border: `2px solid ${isSelected ? "var(--primary)" : "var(--line)"}`,
+                          background: isSelected ? "var(--primary)" : "var(--surface)",
                           color: isSelected ? "white" : "var(--text)",
                           cursor: "pointer",
                           fontWeight: isSelected ? 700 : 500,
@@ -120,7 +129,7 @@ export default function MapPage() {
         </div>
 
         {/* Status filter + heading */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.25rem", borderTop: "1px solid var(--border)", paddingTop: "1.5rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1.25rem", borderTop: "1px solid var(--line)", paddingTop: "1.5rem" }}>
           <h2 style={{ fontWeight: 700, fontSize: "1.1rem" }}>
             {selectedCode
               ? `${selectedJxInfo?.label ?? selectedCode} — ${displayedLaws.length} law${displayedLaws.length !== 1 ? "s" : ""}`
@@ -137,7 +146,7 @@ export default function MapPage() {
                   padding: "0.3rem 0.75rem",
                   fontSize: "0.78rem",
                   borderRadius: "999px",
-                  border: "1px solid var(--border)",
+                  border: "1px solid var(--line)",
                   background: statusFilter === s ? "var(--navy)" : "transparent",
                   color: statusFilter === s ? "#fff" : "var(--text)",
                   cursor: "pointer",
@@ -152,7 +161,7 @@ export default function MapPage() {
 
         {/* Law cards */}
         {displayedLaws.length === 0 ? (
-          <div className="card" style={{ padding: "2rem", textAlign: "center", color: "var(--muted)" }}>
+          <div className="content-card" style={{ padding: "2rem", textAlign: "center", color: "var(--muted)" }}>
             No laws match the selected filters.
           </div>
         ) : (
@@ -163,13 +172,15 @@ export default function MapPage() {
                 href={`/laws/${law.slug}`}
                 style={{ textDecoration: "none" }}
               >
-                <div className="card" style={{ padding: "1rem 1.15rem", height: "100%", cursor: "pointer", transition: "box-shadow 0.15s" }}>
+                <div className="content-card" style={{ padding: "1rem 1.15rem", height: "100%", cursor: "pointer", transition: "box-shadow 0.15s" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem", marginBottom: "0.5rem" }}>
                     <span style={{
                       fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase",
-                      letterSpacing: "0.06em", color: "#fff", padding: "0.15rem 0.55rem",
+                      letterSpacing: "0.06em",
+                      color: STATUS_COLOR[law.status] ?? "var(--muted)",
+                      background: STATUS_BG[law.status] ?? "var(--surface-alt)",
+                      padding: "0.15rem 0.55rem",
                       borderRadius: "999px",
-                      background: STATUS_COLOR[law.status] ?? "#6b7280",
                     }}>
                       {STATUS_LABEL[law.status] ?? law.status}
                     </span>

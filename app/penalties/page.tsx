@@ -117,9 +117,9 @@ const CURRENCY_LABELS: Record<string, string> = {
 };
 
 const SEVERITY_COLOR = {
-  critical: { bg: "#fee2e2", text: "#b91c1c" },
-  high: { bg: "#fef3c7", text: "#b45309" },
-  medium: { bg: "#dbeafe", text: "#1d4ed8" },
+  critical: { bg: "var(--red-light)",   text: "var(--red)" },
+  high:     { bg: "var(--amber-light)", text: "var(--amber)" },
+  medium:   { bg: "var(--primary-light)", text: "var(--primary)" },
 };
 
 function fmt(n: number, currency: string): string {
@@ -188,10 +188,11 @@ export default function PenaltiesPage() {
 
         {/* Header */}
         <div style={{ marginBottom: "2rem" }}>
-          <h1 style={{ fontSize: "clamp(1.6rem, 3vw, 2.4rem)", fontWeight: 800, color: "var(--navy)", marginBottom: "0.4rem" }}>
+          <p className="kicker">Compliance risk</p>
+          <h1 style={{ margin: "0.4rem 0 0.5rem", fontFamily: "var(--font-heading)", fontSize: "clamp(1.8rem, 3.5vw, 2.8rem)", lineHeight: 1.08, letterSpacing: "-0.03em" }}>
             Penalty Calculator
           </h1>
-          <p style={{ color: "var(--muted)", lineHeight: 1.7 }}>
+          <p style={{ color: "var(--muted)", lineHeight: 1.7, maxWidth: "65ch" }}>
             Estimate your maximum fine exposure across AI and data privacy laws worldwide.
             Enter your annual global revenue, then select every law that applies to your organisation.
             The calculator ranks penalties from largest to smallest, showing both fixed caps and
@@ -213,7 +214,7 @@ export default function PenaltiesPage() {
                       aria-label="Revenue currency"
                       value={currency}
                       onChange={(e) => setCurrency(e.target.value)}
-                      style={{ padding: "0.5rem 0.6rem", borderRadius: "8px", border: "1px solid var(--border)", background: "white", fontSize: "0.875rem", color: "var(--text)", flexShrink: 0 }}
+                      style={{ padding: "0.5rem 0.6rem", borderRadius: "8px", border: "1px solid var(--line)", background: "var(--surface)", fontSize: "0.875rem", color: "var(--text)", flexShrink: 0 }}
                     >
                       {Object.entries(CURRENCY_LABELS).map(([k, v]) => (
                         <option key={k} value={k}>{v}</option>
@@ -226,7 +227,7 @@ export default function PenaltiesPage() {
                       placeholder="e.g. 50000000"
                       value={revenue}
                       onChange={(e) => setRevenue(e.target.value)}
-                      style={{ flex: 1, padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.875rem", color: "var(--text)" }}
+                      style={{ flex: 1, padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--line)", fontSize: "0.875rem", color: "var(--text)" }}
                     />
                   </div>
                   {revNum > 0 && (
@@ -244,7 +245,7 @@ export default function PenaltiesPage() {
               <p style={{ fontSize: "0.85rem", color: "var(--muted)", marginBottom: "0.75rem" }}>Select all laws that may apply to your operations.</p>
               <div className="stack">
                 {FINE_DATA.map((law) => (
-                  <label key={law.lawSlug} style={{ display: "flex", alignItems: "center", gap: "0.6rem", cursor: "pointer", padding: "0.45rem 0", borderBottom: "1px solid var(--border)", fontSize: "0.875rem" }}>
+                  <label key={law.lawSlug} style={{ display: "flex", alignItems: "center", gap: "0.6rem", cursor: "pointer", padding: "0.45rem 0", borderBottom: "1px solid var(--line)", fontSize: "0.875rem" }}>
                     <input
                       type="checkbox"
                       checked={selected.has(law.lawSlug)}
@@ -268,7 +269,7 @@ export default function PenaltiesPage() {
             </h2>
 
             {exposures.length === 0 && (
-              <div className="card" style={{ padding: "2rem", textAlign: "center", color: "var(--muted)" }}>
+              <div className="content-card" style={{ padding: "2rem", textAlign: "center", color: "var(--muted)" }}>
                 Select at least one law to see fine exposure.
               </div>
             )}
@@ -277,7 +278,7 @@ export default function PenaltiesPage() {
               {exposures.map((ex, i) => {
                 const colors = SEVERITY_COLOR[ex.severity];
                 return (
-                  <div key={i} className="card" style={{ padding: "1rem 1.15rem" }}>
+                  <div key={i} className="content-card" style={{ padding: "1rem 1.15rem" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.75rem" }}>
                       <div>
                         <span style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: colors.text, background: colors.bg, padding: "0.15rem 0.5rem", borderRadius: "999px" }}>
@@ -291,7 +292,7 @@ export default function PenaltiesPage() {
                       <div style={{ textAlign: "right", flexShrink: 0 }}>
                         {ex.maxFine > 0 ? (
                           <>
-                            <div style={{ fontSize: "1.35rem", fontWeight: 800, color: ex.severity === "critical" ? "#b91c1c" : "var(--navy)" }}>
+                            <div style={{ fontSize: "1.35rem", fontWeight: 800, color: ex.severity === "critical" ? "var(--red)" : "var(--navy)" }}>
                               {fmt(ex.maxFine, ex.currency)}
                             </div>
                             <div style={{ fontSize: "0.72rem", color: "var(--muted)" }}>{ex.currency} max</div>

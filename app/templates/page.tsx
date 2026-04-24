@@ -29,39 +29,35 @@ export default function TemplatesPage() {
 
         <div className="card-grid">
           {TEMPLATE_LIBRARY.map((template) => (
-            <div key={template.slug} className="content-card">
-              <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "flex-start" }}>
-                <div>
-                  <span className="micro">{template.intendedUser}</span>
-                  <h2 style={{ margin: "0.55rem 0 0.35rem", color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.2rem" }}>
-                    {template.title}
-                  </h2>
-                </div>
-                <a href={`/templates/${template.slug}`} className="button button--primary" style={{ textDecoration: "none", whiteSpace: "nowrap" }}>
-                  Download {template.formatLabel}
-                </a>
+            <div key={template.slug} className="content-card" style={{ display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "flex-start", marginBottom: "0.5rem" }}>
+                <span className="micro">{template.intendedUser}</span>
+                <span className="tag">{template.formatLabel}</span>
               </div>
-              <p style={{ color: "var(--muted)", fontSize: "0.92rem", margin: "0 0 0.85rem" }}>{template.useCase}</p>
-              <div style={{ display: "grid", gap: "0.55rem" }}>
-                <div style={{ padding: "0.75rem 0.85rem", borderRadius: "12px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
-                  <p style={{ margin: "0 0 0.2rem", fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)" }}>
-                    Last reviewed
+              <h2 style={{ margin: "0.25rem 0 0.5rem", fontFamily: "var(--font-heading)", fontSize: "1.2rem" }}>
+                {template.title}
+              </h2>
+              <p style={{ color: "var(--muted)", fontSize: "0.92rem", margin: "0 0 1rem", flex: 1 }}>{template.useCase}</p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginBottom: "1rem" }}>
+                <div style={{ padding: "0.65rem 0.75rem", borderRadius: "var(--radius-xs)", background: "var(--surface-alt)", border: "1px solid var(--line)" }}>
+                  <p style={{ margin: "0 0 0.15rem", fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)" }}>
+                    Reviewed
                   </p>
-                  <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.9rem" }}>{template.lastReviewed}</p>
+                  <p style={{ margin: 0, fontSize: "0.875rem", fontWeight: 600 }}>{template.lastReviewed}</p>
                 </div>
-                <div style={{ padding: "0.75rem 0.85rem", borderRadius: "12px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
-                  <p style={{ margin: "0 0 0.2rem", fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)" }}>
+                <div style={{ padding: "0.65rem 0.75rem", borderRadius: "var(--radius-xs)", background: "var(--surface-alt)", border: "1px solid var(--line)" }}>
+                  <p style={{ margin: "0 0 0.15rem", fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)" }}>
                     Format
                   </p>
-                  <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.9rem" }}>{template.formatLabel} for browser, Word, and Google Docs</p>
-                </div>
-                <div style={{ padding: "0.75rem 0.85rem", borderRadius: "12px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
-                  <p style={{ margin: "0 0 0.2rem", fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)" }}>
-                    Disclaimer
-                  </p>
-                  <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.9rem", lineHeight: 1.5 }}>{template.disclaimer}</p>
+                  <p style={{ margin: 0, fontSize: "0.875rem", fontWeight: 600 }}>{template.formatLabel}</p>
                 </div>
               </div>
+              <p style={{ margin: "0 0 1rem", fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.55 }}>
+                <strong style={{ color: "var(--text)" }}>Note:</strong> {template.disclaimer}
+              </p>
+              <a href={`/templates/${template.slug}`} className="button button--primary" style={{ textDecoration: "none", textAlign: "center" }}>
+                Download {template.formatLabel} →
+              </a>
             </div>
           ))}
         </div>

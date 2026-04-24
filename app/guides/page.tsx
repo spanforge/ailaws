@@ -202,11 +202,19 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const STATUS_COLOR: Record<string, string> = {
-  in_force: "#1d6e52",
-  enacted: "#1a56db",
-  proposed: "#b45309",
-  draft: "#6b7280",
-  repealed: "#9b1c1c",
+  in_force: "var(--green)",
+  enacted: "var(--primary)",
+  proposed: "var(--amber)",
+  draft: "var(--muted)",
+  repealed: "var(--red)",
+};
+
+const STATUS_BG: Record<string, string> = {
+  in_force: "var(--green-light)",
+  enacted: "var(--primary-light)",
+  proposed: "var(--amber-light)",
+  draft: "var(--surface-alt)",
+  repealed: "var(--red-light)",
 };
 
 export default function GuidesPage() {
@@ -216,7 +224,8 @@ export default function GuidesPage() {
 
         {/* Header */}
         <div style={{ marginBottom: "2.5rem" }}>
-          <h1 style={{ fontSize: "clamp(1.6rem, 3vw, 2.4rem)", fontWeight: 800, color: "var(--navy)", marginBottom: "0.4rem" }}>
+          <p className="kicker">By industry</p>
+          <h1 style={{ margin: "0.4rem 0 0.5rem", fontFamily: "var(--font-heading)", fontSize: "clamp(1.8rem, 3.5vw, 2.8rem)", lineHeight: 1.08, letterSpacing: "-0.03em" }}>
             Sector Compliance Guides
           </h1>
           <p style={{ color: "var(--muted)", maxWidth: "55ch" }}>
@@ -228,7 +237,7 @@ export default function GuidesPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "0.75rem", marginBottom: "3rem" }}>
           {SECTOR_GUIDES.map((g) => (
             <a key={g.id} href={`#${g.id}`} style={{ textDecoration: "none" }}>
-              <div className="card" style={{ padding: "1rem 1.1rem", display: "flex", alignItems: "center", gap: "0.75rem", cursor: "pointer" }}>
+              <div className="content-card" style={{ padding: "1rem 1.1rem", display: "flex", alignItems: "center", gap: "0.75rem", cursor: "pointer" }}>
                 <span style={{ fontSize: "1.5rem" }}>{g.icon}</span>
                 <div>
                   <strong style={{ color: "var(--navy)", fontSize: "0.95rem" }}>{g.name}</strong>
@@ -249,7 +258,7 @@ export default function GuidesPage() {
           return (
             <section key={guide.id} id={guide.id} style={{ marginBottom: "3.5rem", scrollMarginTop: "5rem" }}>
               {/* Sector header */}
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem", paddingBottom: "0.75rem", borderBottom: "2px solid var(--border)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem", paddingBottom: "0.75rem", borderBottom: "2px solid var(--line)" }}>
                 <span style={{ fontSize: "2rem" }}>{guide.icon}</span>
                 <div>
                   <h2 style={{ fontSize: "1.4rem", fontWeight: 800, color: "var(--navy)", margin: 0 }}>{guide.name}</h2>
@@ -276,7 +285,7 @@ export default function GuidesPage() {
                   <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--navy)", marginBottom: "0.75rem" }}>Priority action items</h3>
                   <div className="stack">
                     {guide.actionItems.map((item, i) => (
-                      <div key={i} style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start", padding: "0.75rem 1rem", background: "rgba(255,255,255,0.8)", borderRadius: "12px", border: "1px solid var(--border)" }}>
+                      <div key={i} style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start", padding: "0.75rem 1rem", background: "var(--surface)", borderRadius: "var(--radius-xs)", border: "1px solid var(--line)" }}>
                         <span style={{ flexShrink: 0, width: "1.4rem", height: "1.4rem", borderRadius: "50%", background: "var(--navy)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", fontWeight: 800 }}>
                           {i + 1}
                         </span>
@@ -299,10 +308,10 @@ export default function GuidesPage() {
                     <div className="stack">
                       {relevantLaws.map((law) => (
                         <Link key={law.slug} href={`/laws/${law.slug}`} style={{ textDecoration: "none" }}>
-                          <div style={{ padding: "0.6rem 0.75rem", borderRadius: "10px", border: "1px solid var(--border)", cursor: "pointer", background: "rgba(255,255,255,0.7)", transition: "background 0.12s" }}>
+                          <div style={{ padding: "0.6rem 0.75rem", borderRadius: "var(--radius-xs)", border: "1px solid var(--line)", cursor: "pointer", background: "var(--surface)", transition: "background 0.12s" }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.4rem" }}>
-                              <strong style={{ color: "var(--navy)", fontSize: "0.85rem", lineHeight: 1.3 }}>{law.short_title}</strong>
-                              <span style={{ fontSize: "0.65rem", fontWeight: 700, color: STATUS_COLOR[law.status] ?? "#6b7280", background: `${STATUS_COLOR[law.status] ?? "#6b7280"}18`, padding: "0.1rem 0.4rem", borderRadius: "999px", whiteSpace: "nowrap" }}>
+                              <strong style={{ fontSize: "0.85rem", lineHeight: 1.3 }}>{law.short_title}</strong>
+                              <span style={{ fontSize: "0.65rem", fontWeight: 700, color: STATUS_COLOR[law.status] ?? "var(--muted)", background: STATUS_BG[law.status] ?? "var(--surface-alt)", padding: "0.1rem 0.4rem", borderRadius: "999px", whiteSpace: "nowrap" }}>
                                 {STATUS_LABEL[law.status] ?? law.status}
                               </span>
                             </div>
@@ -311,7 +320,7 @@ export default function GuidesPage() {
                         </Link>
                       ))}
                     </div>
-                    <Link href="/compare" style={{ display: "block", marginTop: "0.75rem", fontSize: "0.82rem", color: "var(--navy)", textAlign: "center", fontWeight: 600, textDecoration: "none", padding: "0.4rem", borderRadius: "8px", border: "1px solid var(--border)", background: "transparent" }}>
+                    <Link href="/compare" className="button" style={{ display: "block", marginTop: "0.75rem", textAlign: "center", textDecoration: "none" }}>
                       Compare these laws side-by-side →
                     </Link>
                   </div>

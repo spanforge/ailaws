@@ -253,10 +253,11 @@ function PresetValue({ label }: { label: string }) {
         display: "inline-flex",
         borderRadius: "999px",
         padding: "0.22rem 0.6rem",
-        background: "rgba(16,32,48,0.07)",
-        color: "var(--navy)",
+        background: "var(--surface-alt)",
+        border: "1px solid var(--line)",
+        color: "var(--text)",
         fontSize: "0.78rem",
-        fontWeight: 700,
+        fontWeight: 600,
       }}
     >
       {label}
@@ -273,7 +274,7 @@ function PresetPicker({
 }) {
   return (
     <div className="content-card">
-      <h2 style={{ margin: "0 0 0.75rem", color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.5rem" }}>
+      <h2 style={{ margin: "0 0 0.75rem", fontFamily: "var(--font-heading)", fontSize: "1.5rem" }}>
         Start from a preset
       </h2>
       <p style={{ color: "var(--muted)", margin: "0 0 1.25rem" }}>
@@ -288,13 +289,16 @@ function PresetPicker({
             style={{
               textAlign: "left",
               padding: "1rem",
-              borderRadius: "18px",
-              border: "1px solid rgba(16,32,48,0.1)",
-              background: "rgba(255,255,255,0.85)",
+              borderRadius: "var(--radius-sm)",
+              border: "1px solid var(--line)",
+              background: "var(--surface)",
               cursor: "pointer",
+              transition: "border-color 0.15s, box-shadow 0.15s",
             }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--primary)"; e.currentTarget.style.boxShadow = "var(--shadow-sm)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--line)"; e.currentTarget.style.boxShadow = "none"; }}
           >
-            <strong style={{ display: "block", color: "var(--navy)", marginBottom: "0.35rem" }}>{preset.title}</strong>
+            <strong style={{ display: "block", marginBottom: "0.35rem" }}>{preset.title}</strong>
             <span style={{ display: "block", color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.5 }}>{preset.description}</span>
             <span
               style={{
@@ -302,8 +306,8 @@ function PresetPicker({
                 marginTop: "0.7rem",
                 fontSize: "0.74rem",
                 fontWeight: 700,
-                color: "var(--navy)",
-                background: "rgba(16,32,48,0.07)",
+                color: "var(--primary)",
+                background: "var(--primary-light)",
                 borderRadius: "999px",
                 padding: "0.2rem 0.55rem",
               }}
@@ -489,9 +493,9 @@ function StepTechnical({
         alignItems: "center",
         justifyContent: "space-between",
         padding: "0.85rem 1rem",
-        borderRadius: "14px",
-        background: "rgba(255,255,255,0.72)",
-        border: "1px solid rgba(16,32,48,0.09)",
+        borderRadius: "var(--radius-sm)",
+        background: "var(--surface)",
+        border: "1px solid var(--line)",
       }}
     >
       <div>
@@ -504,12 +508,12 @@ function StepTechnical({
         style={{
           padding: "0.5rem 1.25rem",
           borderRadius: "999px",
-          border: "none",
+          border: `1px solid ${form[field] ? "var(--primary)" : "var(--line)"}`,
           fontWeight: 700,
           fontSize: "0.9rem",
           cursor: "pointer",
-          background: form[field] ? "var(--navy)" : "rgba(16,32,48,0.08)",
-          color: form[field] ? "#fff" : "var(--navy)",
+          background: form[field] ? "var(--primary)" : "var(--surface-alt)",
+          color: form[field] ? "#fff" : "var(--muted)",
         }}
       >
         {form[field] ? "Yes" : "No"}
@@ -574,7 +578,7 @@ function StepReview({ form }: { form: AssessmentInput }) {
 
 function ReviewRow({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: "0.5rem", padding: "0.5rem 0", borderBottom: "1px solid rgba(16,32,48,0.07)" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: "0.5rem", padding: "0.5rem 0", borderBottom: "1px solid var(--line)" }}>
       <dt style={{ fontWeight: 700, color: "var(--muted)", fontSize: "0.88rem" }}>{label}</dt>
       <dd style={{ margin: 0, fontSize: "0.92rem", color: "var(--navy)", textTransform: "capitalize" }}>{value}</dd>
     </div>

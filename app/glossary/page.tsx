@@ -225,7 +225,8 @@ export default function GlossaryPage() {
 
         {/* Header */}
         <div style={{ marginBottom: "2rem" }}>
-          <h1 style={{ fontSize: "clamp(1.6rem, 3vw, 2.4rem)", fontWeight: 800, color: "var(--navy)", marginBottom: "0.4rem" }}>
+          <p className="kicker">Reference</p>
+          <h1 style={{ margin: "0.4rem 0 0.5rem", fontFamily: "var(--font-heading)", fontSize: "clamp(1.8rem, 3.5vw, 2.8rem)", lineHeight: 1.08, letterSpacing: "-0.03em" }}>
             AI Law Glossary
           </h1>
           <p style={{ color: "var(--muted)", maxWidth: "55ch" }}>
@@ -239,7 +240,7 @@ export default function GlossaryPage() {
             <a
               key={cat}
               href={`#cat-${cat.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
-              style={{ display: "inline-block", padding: "0.3rem 0.8rem", borderRadius: "999px", fontSize: "0.82rem", fontWeight: 600, border: "1px solid var(--border)", textDecoration: "none", color: "var(--navy)", background: "rgba(255,255,255,0.8)" }}
+              className="chip"
             >
               {cat}
             </a>
@@ -249,7 +250,7 @@ export default function GlossaryPage() {
         {/* Entries by category */}
         {CATEGORIES.map((cat) => (
           <section key={cat} id={`cat-${cat.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`} style={{ marginBottom: "3rem", scrollMarginTop: "5rem" }}>
-            <h2 style={{ fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--muted)", marginBottom: "1rem", paddingBottom: "0.5rem", borderBottom: "1px solid var(--border)" }}>
+            <h2 style={{ fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--muted)", marginBottom: "1rem", paddingBottom: "0.5rem", borderBottom: "2px solid var(--line)" }}>
               {cat}
             </h2>
             <div className="stack">
@@ -266,11 +267,11 @@ export default function GlossaryPage() {
 
 function GlossaryCard({ entry }: { entry: GlossaryEntry }) {
   return (
-    <div className="card" style={{ padding: "1.15rem 1.25rem" }}>
-      <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--navy)", margin: "0 0 0.3rem" }}>
+    <div className="content-card" style={{ padding: "1.15rem 1.25rem" }}>
+      <h3 style={{ fontSize: "1.05rem", fontWeight: 700, margin: "0 0 0.3rem" }}>
         {entry.term}
       </h3>
-      <p style={{ margin: "0 0 0.75rem", color: "var(--text)", fontWeight: 500, lineHeight: 1.5, fontSize: "0.95rem" }}>
+      <p style={{ margin: "0 0 0.75rem", fontWeight: 500, lineHeight: 1.5, fontSize: "0.95rem" }}>
         {entry.shortDef}
       </p>
       <p style={{ margin: "0 0 0.75rem", color: "var(--muted)", lineHeight: 1.7, fontSize: "0.875rem" }}>
@@ -280,7 +281,7 @@ function GlossaryCard({ entry }: { entry: GlossaryEntry }) {
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginTop: "0.5rem" }}>
           <span style={{ fontSize: "0.75rem", color: "var(--muted)", alignSelf: "center", marginRight: "0.25rem" }}>Referenced in:</span>
           {entry.lawRefs.map((ref) => (
-            <span key={ref} style={{ fontSize: "0.72rem", fontWeight: 600, padding: "0.15rem 0.5rem", borderRadius: "999px", background: "var(--surface)", color: "var(--navy)", border: "1px solid var(--border)" }}>
+            <span key={ref} className="tag">
               {ref}
             </span>
           ))}

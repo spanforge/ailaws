@@ -7,12 +7,12 @@ export const metadata: Metadata = {
   description: "Chronological view of AI regulations — when laws were enacted and when they take effect worldwide.",
 };
 
-const STATUS_COLOR: Record<string, { bg: string; text: string; border: string }> = {
-  in_force:  { bg: "#dcfce7", text: "#166534", border: "#86efac" },
-  enacted:   { bg: "#dbeafe", text: "#1e40af", border: "#93c5fd" },
-  proposed:  { bg: "#fef3c7", text: "#92400e", border: "#fcd34d" },
-  draft:     { bg: "#f3f4f6", text: "#374151", border: "#d1d5db" },
-  repealed:  { bg: "#fee2e2", text: "#991b1b", border: "#fca5a5" },
+const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
+  in_force:  { bg: "var(--green-light)",   text: "var(--green)" },
+  enacted:   { bg: "var(--primary-light)", text: "var(--primary)" },
+  proposed:  { bg: "var(--amber-light)",  text: "var(--amber)" },
+  draft:     { bg: "var(--surface-alt)",  text: "var(--muted)" },
+  repealed:  { bg: "var(--red-light)",    text: "var(--red)" },
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -56,15 +56,16 @@ export default function TimelinePage() {
 
         {/* Header */}
         <div style={{ marginBottom: "2.5rem" }}>
-          <h1 style={{ fontSize: "clamp(1.6rem, 3vw, 2.4rem)", fontWeight: 800, color: "var(--navy)", marginBottom: "0.4rem" }}>
+          <p className="kicker">History</p>
+          <h1 style={{ margin: "0.4rem 0 0.5rem", fontFamily: "var(--font-heading)", fontSize: "clamp(1.8rem, 3.5vw, 2.8rem)", lineHeight: 1.08, letterSpacing: "-0.03em" }}>
             AI Regulation Timeline
           </h1>
           <p style={{ color: "var(--muted)", maxWidth: "55ch" }}>
             A chronological view of when AI laws were adopted and when they take effect — from 2016 to today.
           </p>
           <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginTop: "1rem" }}>
-            <LegendPill label="Adopted / Enacted" bg="#e0e7ff" text="#3730a3" border="#a5b4fc" />
-            <LegendPill label="Effective / Applies" bg="#dcfce7" text="#166534" border="#86efac" />
+            <LegendPill label="Adopted / Enacted" bg="var(--primary-light)" text="var(--primary)" />
+            <LegendPill label="Effective / Applies" bg="var(--green-light)" text="var(--green)" />
           </div>
         </div>
 
@@ -85,7 +86,7 @@ export default function TimelinePage() {
         {/* Timeline */}
         <div style={{ position: "relative", paddingLeft: "2rem" }}>
           {/* Vertical line */}
-          <div style={{ position: "absolute", left: "0.55rem", top: 0, bottom: 0, width: 2, background: "var(--border)" }} />
+          <div style={{ position: "absolute", left: "0.55rem", top: 0, bottom: 0, width: 2, background: "var(--line)" }} />
 
           {years.map((year) => (
             <div key={year} style={{ marginBottom: "2.5rem" }}>
@@ -102,17 +103,17 @@ export default function TimelinePage() {
                   return (
                     <div key={`${ev.law.slug}-${ev.kind}-${idx}`} style={{ position: "relative" }}>
                       {/* Dot */}
-                      <div style={{ position: "absolute", left: "-1.65rem", top: "1rem", width: "0.65rem", height: "0.65rem", borderRadius: "50%", background: isEffective ? "#166534" : "#3730a3", border: "2px solid white", boxShadow: `0 0 0 2px ${isEffective ? "#86efac" : "#a5b4fc"}` }} />
+                      <div style={{ position: "absolute", left: "-1.65rem", top: "1rem", width: "0.65rem", height: "0.65rem", borderRadius: "50%", background: isEffective ? "var(--green)" : "var(--primary)", border: "2px solid white", boxShadow: `0 0 0 2px ${isEffective ? "var(--green)" : "var(--primary)"}` }} />
 
                       <Link href={`/laws/${ev.law.slug}`} style={{ textDecoration: "none" }}>
-                        <div className="card" style={{ padding: "0.9rem 1.1rem", cursor: "pointer", borderLeft: `3px solid ${isEffective ? "#86efac" : "#a5b4fc"}` }}>
+                        <div className="content-card" style={{ padding: "0.9rem 1.1rem", cursor: "pointer", borderLeft: `3px solid ${isEffective ? "var(--green)" : "var(--primary)"}` }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.75rem", flexWrap: "wrap" }}>
                             <div style={{ flex: 1 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.3rem" }}>
-                                <span style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", padding: "0.15rem 0.5rem", borderRadius: "999px", background: isEffective ? "#dcfce7" : "#e0e7ff", color: isEffective ? "#166534" : "#3730a3" }}>
+                                <span style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", padding: "0.15rem 0.5rem", borderRadius: "999px", background: isEffective ? "var(--green-light)" : "var(--primary-light)", color: isEffective ? "var(--green)" : "var(--primary)" }}>
                                   {isEffective ? "Effective" : "Adopted"}
                                 </span>
-                                <span style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", padding: "0.15rem 0.5rem", borderRadius: "999px", background: sc.bg, color: sc.text, border: `1px solid ${sc.border}` }}>
+                                <span style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", padding: "0.15rem 0.5rem", borderRadius: "999px", background: sc.bg, color: sc.text }}>
                                   {STATUS_LABEL[ev.law.status]}
                                 </span>
                               </div>
@@ -148,9 +149,9 @@ function formatDate(iso: string): string {
   return `${months[parseInt(month) - 1]} ${parseInt(day)}, ${year}`;
 }
 
-function LegendPill({ label, bg, text, border }: { label: string; bg: string; text: string; border: string }) {
+function LegendPill({ label, bg, text }: { label: string; bg: string; text: string }) {
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", padding: "0.25rem 0.7rem", borderRadius: "999px", background: bg, color: text, border: `1px solid ${border}`, fontSize: "0.8rem", fontWeight: 600 }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", padding: "0.25rem 0.7rem", borderRadius: "999px", background: bg, color: text, border: "1px solid var(--line)", fontSize: "0.8rem", fontWeight: 600 }}>
       {label}
     </span>
   );

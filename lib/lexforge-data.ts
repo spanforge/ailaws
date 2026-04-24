@@ -10,6 +10,7 @@ export type Obligation = {
   priority: "critical" | "high" | "medium" | "low";
   citation: string;
   action_required: string;
+  spanforge_controls?: string[];
 };
 
 export type ApplicabilityRule = {
@@ -48,6 +49,9 @@ export type Law = {
   topics: string[];
   obligations: Obligation[];
   applicability_rules: ApplicabilityRule[];
+  freshness_sla_days?: number;
+  draft_status?: "draft" | "published";
+  last_reviewed_at?: string; // ISO date string
 };
 
 export const laws: Law[] = [
@@ -76,6 +80,7 @@ export const laws: Law[] = [
         priority: "critical",
         citation: "Art. 6, Annex III",
         action_required: "Complete a formal risk classification analysis; document reasoning; update if system changes significantly.",
+        spanforge_controls: ["SF-GOV-01: AI Risk Registry", "SF-GOV-02: System Classification Log"],
       },
       {
         id: "eu-ai-002",
@@ -85,6 +90,7 @@ export const laws: Law[] = [
         priority: "critical",
         citation: "Art. 11, Annex IV",
         action_required: "Draft and maintain technical documentation before market placement. Update on material changes.",
+        spanforge_controls: ["SF-DOC-01: Model Card Template", "SF-DOC-02: System Architecture Record"],
       },
       {
         id: "eu-ai-003",
@@ -94,6 +100,7 @@ export const laws: Law[] = [
         priority: "critical",
         citation: "Art. 43",
         action_required: "Complete conformity assessment; obtain CE marking; register in EU database for high-risk AI.",
+        spanforge_controls: ["SF-COMP-01: Conformity Assessment Checklist", "SF-COMP-02: CE Registration Workflow"],
       },
       {
         id: "eu-ai-004",
@@ -103,6 +110,7 @@ export const laws: Law[] = [
         priority: "high",
         citation: "Art. 14",
         action_required: "Design and implement human oversight interfaces; test and validate override capabilities; train operators.",
+        spanforge_controls: ["SF-GOV-03: Human-in-the-Loop Policy", "SF-GOV-04: Operator Training Record"],
       },
       {
         id: "eu-ai-005",
@@ -112,6 +120,7 @@ export const laws: Law[] = [
         priority: "high",
         citation: "Art. 50",
         action_required: "Add clear AI disclosure notices at point of interaction. For deepfake content, label output.",
+        spanforge_controls: ["SF-TRANS-01: AI Disclosure Banner", "SF-TRANS-02: Deepfake Label Policy"],
       },
       {
         id: "eu-ai-006",
@@ -121,6 +130,7 @@ export const laws: Law[] = [
         priority: "high",
         citation: "Art. 10",
         action_required: "Audit training data sources; document data governance policies; address identified biases.",
+        spanforge_controls: ["SF-DATA-01: Training Data Audit", "SF-DATA-02: Bias Assessment Report"],
       },
       {
         id: "eu-ai-007",
@@ -130,6 +140,7 @@ export const laws: Law[] = [
         priority: "critical",
         citation: "Art. 5",
         action_required: "Review system against prohibited use cases list; obtain legal confirmation of compliance.",
+        spanforge_controls: ["SF-GOV-05: Prohibited Use Review", "SF-LEGAL-01: Legal Clearance Sign-off"],
       },
       {
         id: "eu-ai-008",
@@ -139,6 +150,7 @@ export const laws: Law[] = [
         priority: "high",
         citation: "Art. 53",
         action_required: "Publish training data summary; implement copyright policy; maintain model card documentation.",
+        spanforge_controls: ["SF-DOC-03: GPAI Model Card", "SF-LEGAL-02: Copyright Compliance Policy"],
       },
     ],
     applicability_rules: [
@@ -190,7 +202,7 @@ export const laws: Law[] = [
     content_type: "executive_order",
     adopted_date: "2023-10-30",
     effective_date: "2023-10-30",
-    official_url: "https://www.whitehouse.gov/briefing-room/presidential-actions/2023/10/30/executive-order-on-the-safe-secure-and-trustworthy-development-and-use-of-artificial-intelligence/",
+    official_url: "https://www.federalregister.gov/documents/2023/11/01/2023-24283/safe-secure-and-trustworthy-development-and-use-of-artificial-intelligence",
     topics: ["Safety", "Security", "National Security", "Civil Rights", "Privacy", "Workforce"],
     summary_short: "Landmark US executive action directing federal agencies to develop AI safety standards, with particular focus on dual-use foundation models and critical infrastructure.",
     summary_long: "Executive Order 14110 is the most comprehensive US action on AI to date. It directed NIST to develop AI safety and security standards, required developers of powerful dual-use foundation models to share safety test results with the US government, and established new cybersecurity protections for AI systems. It directed agencies to protect Americans from AI-enabled discrimination and fraud, advance AI safety research, promote privacy-preserving techniques, and ensure AI does not undermine workers. Federal agencies were given deadlines to produce guidance and regulations across their domains.",
@@ -1069,7 +1081,7 @@ export const laws: Law[] = [
     content_type: "guideline",
     adopted_date: "2024-04-19",
     effective_date: "2024-04-19",
-    official_url: "https://www.soumu.go.jp/main_content/000963859.pdf",
+    official_url: "https://www.soumu.go.jp/main_sosiki/joho_tsusin/policyreports/joho_tsusin/ai_network/index.html",
     topics: ["Safety", "Transparency", "Data Governance", "Accountability"],
     summary_short: "Japan's comprehensive AI guidelines covering development, deployment, and use of AI, aligned with G7 Hiroshima AI Process principles.",
     summary_long: "Japan's Guidelines for AI Development and Utilization set principles for all AI stakeholders. The guidelines cover safety by design, security measures, privacy protection, fairness, transparency, accountability, and innovation promotion. Aligned with the G7 Hiroshima AI Process, the guidelines are addressed to AI developers, AI providers, and AI users, with differentiated obligations based on role. Japan takes a light-touch regulatory approach, preferring voluntary compliance backed by industry standards.",
@@ -1124,7 +1136,7 @@ export const laws: Law[] = [
     content_type: "act",
     adopted_date: "2025-01-22",
     effective_date: "2026-01-22",
-    official_url: "https://www.msit.go.kr",
+    official_url: "https://www.msit.go.kr/eng/bbs/list.do?sCode=eng&mId=5&mPid=3",
     topics: ["High-Risk AI", "Transparency", "Safety", "Accountability"],
     summary_short: "South Korea's foundational AI law establishing safety standards, transparency requirements, and government support for AI industry development.",
     summary_long: "South Korea enacted its AI Framework Act in January 2025, becoming one of the first Asian countries with sector-agnostic AI legislation. The law establishes a tiered approach: high-impact AI systems (in healthcare, transportation, finance, law enforcement) face mandatory safety certification and transparency requirements. The law also creates a national AI committee, requires AI business registration for high-impact AI, mandates user notification when interacting with AI, and establishes a government fund to support AI safety research.",
@@ -1151,7 +1163,7 @@ export const laws: Law[] = [
     content_type: "guideline",
     adopted_date: "2023-07-01",
     effective_date: "2023-07-01",
-    official_url: "https://ai.gov.ae/wp-content/uploads/2021/07/UAE-AI-Ethics-Guideines.pdf",
+    official_url: "https://u.ae/en/about-the-uae/digital-uae/ai/AI-ethics",
     topics: ["Accountability", "Transparency", "Safety", "Data Governance"],
     summary_short: "UAE's national AI ethics framework establishing six core principles for responsible AI development and deployment across all sectors.",
     summary_long: "The UAE AI Ethics Guidelines establish six principles: inclusiveness, reliability, transparency, accountability, fairness, and respect for human dignity. The guidelines apply to all entities using or developing AI in the UAE. They include practical guidance on how to implement each principle, including bias assessments, explainability mechanisms, human oversight, and privacy protections. As the UAE positions itself as a global AI hub, these guidelines are complemented by sector-specific regulations in healthcare and financial services.",
@@ -1492,6 +1504,38 @@ export const laws: Law[] = [
     ],
   },
 ];
+
+// ── Freshness metadata injection ─────────────────────────────────────────────
+// Sets freshness_sla_days, draft_status, and last_reviewed_at on key laws.
+const freshnessMap: Record<string, { freshness_sla_days: number; draft_status: "draft" | "published"; last_reviewed_at: string }> = {
+  "eu-ai-act": { freshness_sla_days: 90, draft_status: "published", last_reviewed_at: "2025-03-01" },
+  "us-ai-executive-order-14110": { freshness_sla_days: 60, draft_status: "published", last_reviewed_at: "2025-01-15" },
+  "colorado-sb205": { freshness_sla_days: 120, draft_status: "published", last_reviewed_at: "2025-02-10" },
+  "gdpr": { freshness_sla_days: 180, draft_status: "published", last_reviewed_at: "2024-11-20" },
+  "ccpa-cpra": { freshness_sla_days: 120, draft_status: "published", last_reviewed_at: "2024-12-05" },
+  "uk-ai-safety-framework": { freshness_sla_days: 90, draft_status: "published", last_reviewed_at: "2025-01-20" },
+  "canada-aida": { freshness_sla_days: 90, draft_status: "draft", last_reviewed_at: "2025-02-01" },
+  "us-state-ai-bills": { freshness_sla_days: 60, draft_status: "published", last_reviewed_at: "2025-03-10" },
+  "nist-ai-rmf": { freshness_sla_days: 180, draft_status: "published", last_reviewed_at: "2024-10-15" },
+  "nyc-local-law-144": { freshness_sla_days: 120, draft_status: "published", last_reviewed_at: "2025-01-08" },
+  "eu-product-liability-directive": { freshness_sla_days: 120, draft_status: "draft", last_reviewed_at: "2025-02-20" },
+  "eu-cyber-resilience-act": { freshness_sla_days: 90, draft_status: "published", last_reviewed_at: "2025-01-30" },
+  "spain-aesia-ai-supervision": { freshness_sla_days: 90, draft_status: "draft", last_reviewed_at: "2024-12-15" },
+  "un-ai-governance-framework": { freshness_sla_days: 180, draft_status: "published", last_reviewed_at: "2024-09-01" },
+};
+
+for (const law of laws) {
+  const meta = freshnessMap[law.slug];
+  if (meta) {
+    law.freshness_sla_days = meta.freshness_sla_days;
+    law.draft_status = meta.draft_status;
+    law.last_reviewed_at = meta.last_reviewed_at;
+  } else {
+    law.freshness_sla_days = 180;
+    law.draft_status = "published";
+    law.last_reviewed_at = "2024-06-01";
+  }
+}
 
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

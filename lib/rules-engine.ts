@@ -36,6 +36,7 @@ export type TriggeredObligation = {
   priority: string;
   citation: string;
   action_required: string;
+  spanforge_controls?: string[];
 };
 
 export type AssessmentResult = {
@@ -162,6 +163,7 @@ function selectObligations(
       priority: o.priority,
       citation: o.citation,
       action_required: o.action_required,
+      spanforge_controls: o.spanforge_controls,
     }));
 }
 

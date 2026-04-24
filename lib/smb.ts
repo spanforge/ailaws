@@ -541,6 +541,140 @@ export function buildProductSummary(input?: AssessmentInput | null): string {
   return `${productLabel} focused on ${useCases}. HQ ${input.hq_region || "not provided"}, targeting ${markets}, with ${input.deployment_context} deployment.`;
 }
 
+export type ExecutiveVerdict = {
+  status: "proceed" | "action_required" | "significant_exposure";
+  label: string;
+  headline: string;
+  summary: string;
+  topRisks: string[];
+  immediateActions: string[];
+  ownerRecommendation: string;
+};
+
+export function buildExecutiveVerdict(
+  results: AssessmentResult[],
+  input?: AssessmentInput,
+): ExecutiveVerdict {
+  const likelyApplies = results.filter((r) => r.applicability_status === "likely_applies");
+  const mayApply = results.filter((r) => r.applicability_status === "may_apply");
+  const criticalObligations = likelyApplies.flatMap((r) =>
+    r.triggered_obligations.filter((o) => o.priority === "critical"),
+  );
+  const highObligations = likelyApplies.flatMap((r) =>
+    r.triggered_obligations.filter((o) => o.priority === "high"),
+  );
+
+  const topRisks = likelyApplies
+    .slice(0, 3)
+    .map((r) => {
+      const firstObligation = r.triggered_obligations[0];
+      return firstObligation
+        ? `${r.law_short_title}: ${firstObligation.title}`
+        : `${r.law_short_title} applies to this profile`;
+    });
+
+  const immediateActions = criticalObligations
+    .slice(0, 3)
+    .map((o) => o.action_required || o.title)
+    .concat(highObligations.slice(0, Math.max(0, 3 - criticalObligations.length)).map((o) => o.action_required || o.title));
+
+  const hasHighRiskUseCase =
+    input?.use_cases?.some((uc) => ["hr", "credit_scoring", "medical", "biometric", "law_enforcement"].includes(uc)) ?? false;
+
+  let status: ExecutiveVerdict["status"];
+  let label: string;
+  let headline: string;
+  let summary: string;
+  let ownerRecommendation: string;
+
+  if (likelyApplies.length === 0 && mayApply.length <= 1) {
+    status = "proceed";
+    label = "Low regulatory exposure";
+    headline = "This profile has low current regulatory exposure.";
+    summary =
+      "Based on your assessment inputs, no AI laws currently apply with high confidence. Continue building, but revisit if you expand into EU markets, add automated decision-making, or process biometric or health data.";
+    ownerRecommendation = "Founder or ops lead. Monitor quarterly.";
+  } else if (likelyApplies.length >= 3 || criticalObligations.length >= 2 || hasHighRiskUseCase) {
+    status = "significant_exposure";
+    label = "Significant exposure — legal review needed";
+    headline = `${likelyApplies.length} law${likelyApplies.length !== 1 ? "s" : ""} likely apply with ${criticalObligations.length} critical obligation${criticalObligations.length !== 1 ? "s" : ""} identified.`;
+    summary =
+      "This product profile carries meaningful regulatory exposure. Critical obligations require owner assignment, documented evidence, and a legal review before launch or enterprise sales. Export the evidence package and share with counsel before committing to timelines.";
+    ownerRecommendation = "Legal or compliance lead, with product and engineering for technical controls.";
+  } else {
+    status = "action_required";
+    label = "Action required before launch";
+    headline = `${likelyApplies.length} law${likelyApplies.length !== 1 ? "s" : ""} likely appl${likelyApplies.length !== 1 ? "y" : "ies"}, ${mayApply.length} more may apply.`;
+    summary =
+      "This profile has manageable but real regulatory exposure. Assign owners to the top obligations, produce the required documentation, and run this through a short legal review before a regulated customer or enterprise procurement review.";
+    ownerRecommendation = "Product lead with founder sign-off. Escalate to legal if critical obligations are triggered.";
+  }
+
+  return {
+    status,
+    label,
+    headline,
+    summary,
+    topRisks,
+    immediateActions: immediateActions.slice(0, 3),
+    ownerRecommendation,
+  };
+}
+
+export function getObligationDueDateSuggestion(priority: string): string {
+  const now = new Date();
+  if (priority === "critical") {
+    now.setDate(now.getDate() + 7);
+    return `By ${now.toLocaleDateString("en-US", { month: "short", day: "numeric" })} (this week)`;
+  }
+  if (priority === "high") {
+    now.setDate(now.getDate() + 30);
+    return `By ${now.toLocaleDateString("en-US", { month: "short", day: "numeric" })} (this month)`;
+  }
+  now.setDate(now.getDate() + 90);
+  return `By ${now.toLocaleDateString("en-US", { month: "short", day: "numeric" })} (next quarter)`;
+}
+
+export function buildRecommendedControls(results: AssessmentResult[]): Array<{ category: string; controls: string[] }> {
+  const applicable = results.filter(
+    (r) => r.applicability_status === "likely_applies" || r.applicability_status === "may_apply",
+  );
+
+  const controlMap: Record<string, Set<string>> = {
+    "Data governance": new Set(),
+    "Technical controls": new Set(),
+    "Transparency & disclosure": new Set(),
+    "Human oversight": new Set(),
+    "Documentation": new Set(),
+  };
+
+  for (const result of applicable) {
+    for (const obligation of result.triggered_obligations) {
+      const hay = `${obligation.category} ${obligation.title} ${obligation.action_required}`.toLowerCase();
+      if (hay.includes("privacy") || hay.includes("data protection") || hay.includes("pii"))
+        controlMap["Data governance"].add("PII detection and redaction controls");
+      if (hay.includes("security") || hay.includes("robustness") || hay.includes("integrity"))
+        controlMap["Technical controls"].add("Security testing and adversarial robustness checks");
+      if (hay.includes("transparency") || hay.includes("disclosure") || hay.includes("notice"))
+        controlMap["Transparency & disclosure"].add("AI disclosure notices for end users");
+      if (hay.includes("human") || hay.includes("oversight") || hay.includes("appeal"))
+        controlMap["Human oversight"].add("Human review pathway for automated decisions");
+      if (hay.includes("documentation") || hay.includes("technical doc") || hay.includes("audit trail"))
+        controlMap["Documentation"].add("Technical documentation and audit trail");
+      if (hay.includes("bias") || hay.includes("fairness") || hay.includes("discrimination"))
+        controlMap["Technical controls"].add("Bias testing and fairness evaluation");
+      if (hay.includes("monitoring") || hay.includes("post-market") || hay.includes("performance"))
+        controlMap["Technical controls"].add("Post-deployment monitoring and drift detection");
+      if (hay.includes("incident") || hay.includes("report") || hay.includes("breach"))
+        controlMap["Data governance"].add("Incident response and regulatory reporting process");
+    }
+  }
+
+  return Object.entries(controlMap)
+    .map(([category, controls]) => ({ category, controls: [...controls] }))
+    .filter((group) => group.controls.length > 0);
+}
+
 export function buildKeySources(results: AssessmentResult[]): Array<{ title: string; url: string }> {
   return results
     .filter((result) => result.applicability_status === "likely_applies" || result.applicability_status === "may_apply")

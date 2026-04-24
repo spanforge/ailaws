@@ -1,11 +1,11 @@
 import NextAuth from "next-auth";
 import authConfig from "@/auth.config";
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import type { NextAuthRequest } from "next-auth";
 
 const { auth } = NextAuth(authConfig);
 
-export default auth((req: NextRequest & { auth: ReturnType<typeof auth> extends Promise<infer T> ? T : never }) => {
+export default auth((req: NextAuthRequest) => {
   if (!req.auth) {
     const host = req.headers.get("host") ?? "localhost:3000";
     const protocol = req.nextUrl.protocol;
@@ -25,6 +25,8 @@ export const config = {
     "/admin/:path*",
     "/assess",
     "/assess/:path*",
+    "/evidence",
+    "/evidence/:path*",
     "/templates/:path*",
   ],
 };

@@ -175,9 +175,27 @@ export default function ExplorePage() {
 
 function LawCard({ law }: { law: Law }) {
   const statusLabel = law.status.replace(/_/g, " ");
+  const isStale = law.last_reviewed_at && law.freshness_sla_days
+    ? (Date.now() - new Date(law.last_reviewed_at).getTime()) / 86_400_000 > law.freshness_sla_days
+    : false;
+  const isDraft = law.draft_status === "draft";
 
   return (
     <div className="law-card content-card" style={{ position: "relative" }}>
+      {(isStale || isDraft) && (
+        <div style={{ marginBottom: "0.5rem", display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+          {isStale && (
+            <span style={{ fontSize: "0.72rem", padding: "0.15rem 0.5rem", borderRadius: "999px", background: "var(--amber-light, #fff7e6)", color: "var(--amber, #b45309)", border: "1px solid var(--amber, #b45309)", fontWeight: 600 }}>
+              Needs review
+            </span>
+          )}
+          {isDraft && (
+            <span style={{ fontSize: "0.72rem", padding: "0.15rem 0.5rem", borderRadius: "999px", background: "#f3f4f6", color: "#6b7280", border: "1px solid #d1d5db", fontWeight: 600 }}>
+              Draft
+            </span>
+          )}
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.75rem" }}>
         <span className="micro">{law.jurisdiction}</span>
         <span className={STATUS_COLORS[law.status] ?? "tag"} style={{ fontSize: "0.75rem", textTransform: "capitalize" }}>

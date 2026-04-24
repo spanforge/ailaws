@@ -16,6 +16,35 @@ All API routes that access user data enforce ownership checks:
 - User-scoped resources (assessments, checklists, saved laws) are queried with `userId: session.user.id` in the WHERE clause — users cannot access other users' data.
 - Admin routes (editorial governance, changelog) use a `requireAdmin()` helper that checks `session.user.role === "admin"`.
 
+### Authorization matrix
+
+| Surface | Who can access | Enforcement |
+|---|---|---|
+| `/api/assessments` `GET` | Signed-in owner | `where: { userId: session.user.id }` |
+| `/api/assessments` `POST` | Guest or signed-in user | rate-limited request fingerprint or user id |
+| `/api/checklists/:id/items/:itemId` | Assessment owner or assigned org member | assessment ownership chain + assignee validation |
+| `/api/evidence/*` | Assessment owner | checklist/assessment ownership lookup |
+| `/api/alerts/*` | Signed-in owner | `userId === session.user.id` checks |
+| `/api/organizations` `GET` | Signed-in member | membership query scoped by `userId` |
+| `/api/organizations` `POST` | Signed-in user | creates owner membership for actor only |
+| `/api/organizations/:id/invites` | Org `owner` or `admin` | membership lookup with role allowlist |
+| `/api/organizations/:id/integrations` | Org `owner` or `admin` | membership lookup with role allowlist |
+| `/api/organizations/invites` accept | Invited signed-in email only | invite email match + expiration + replay guard |
+| `/api/admin/*` | Platform admin only | `requireAdmin()` role check |
+
+### Sensitive action auditing
+
+Sensitive admin and organization mutations are persisted to `ActionAuditLog`:
+
+- workspace creation
+- workspace invite creation and resend
+- workspace invite acceptance and expiration denials
+- workspace integration settings changes
+- manual admin compliance-alert delivery
+- changelog create/delete actions
+
+Read-only access is available at `GET /api/admin/action-audit` for admin users.
+
 ## Rate Limiting
 
 In-memory sliding-window rate limiter (`lib/rate-limit.ts`) is applied to:
@@ -39,7 +68,7 @@ In-memory sliding-window rate limiter (`lib/rate-limit.ts`) is applied to:
 | A04 Insecure Design | Checklist items verify ownership through assessment chain |
 | A05 Security Misconfiguration | `validateEnvironment()` at startup; documented env vars |
 | A07 Auth Failures | Rate limiting on auth endpoints, session invalidation on logout |
-| A09 Logging Failures | Structured `log()` function; Sentry breadcrumbs for warn/error |
+| A09 Logging Failures | Structured `log()` function, request correlation via `x-request-id`, persisted action audit trail, Sentry breadcrumbs for warn/error |
 
 ## Secrets Management
 

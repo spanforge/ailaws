@@ -24,7 +24,11 @@ export async function GET(_request: Request, { params }: Props) {
     include: {
       checklists: {
         include: {
-          items: true,
+          items: {
+            include: {
+              evidenceArtifacts: true,
+            },
+          },
         },
         orderBy: { createdAt: "desc" },
       },

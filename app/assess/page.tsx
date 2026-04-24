@@ -41,9 +41,20 @@ const USE_CASE_OPTIONS = [
   { value: "general_purpose", label: "General Purpose AI" },
 ];
 
+const DATA_TYPE_OPTIONS = [
+  { value: "personal_data", label: "Personal Data" },
+  { value: "employment_data", label: "Employment Data" },
+  { value: "financial_data", label: "Financial Data" },
+  { value: "health_data", label: "Health Data" },
+  { value: "biometric_data", label: "Biometric Data" },
+  { value: "children_data", label: "Children's Data" },
+  { value: "sensitive_data", label: "Sensitive Data" },
+];
+
 const BLANK: AssessmentInput = {
   company_name: "",
   product_preset: "",
+  system_description: "",
   hq_region: "",
   company_size: "startup",
   industry: "",
@@ -56,8 +67,43 @@ const BLANK: AssessmentInput = {
   processes_personal_data: false,
   processes_eu_personal_data: false,
   automated_decisions: false,
+  data_types: [],
   risk_self_assessment: "limited",
 };
+
+type ValidationIssue = {
+  field: string;
+  message: string;
+};
+
+function getStepValidationIssues(step: number, form: AssessmentInput): ValidationIssue[] {
+  if (step === 0) {
+    const issues: ValidationIssue[] = [];
+    if (!form.system_description?.trim()) {
+      issues.push({ field: "system_description", message: "Describe your AI system so the classifier can infer likely use cases and regulated data." });
+    }
+    if (!form.hq_region) {
+      issues.push({ field: "hq_region", message: "Select the region where your company is headquartered." });
+    }
+    if (form.target_markets.length === 0) {
+      issues.push({ field: "target_markets", message: "Select at least one market where the product is offered or planned." });
+    }
+    return issues;
+  }
+
+  if (step === 1) {
+    const issues: ValidationIssue[] = [];
+    if (!form.product_type) {
+      issues.push({ field: "product_type", message: "Select the product type closest to this system." });
+    }
+    if (form.use_cases.length === 0) {
+      issues.push({ field: "use_cases", message: "Select at least one use case so the rules engine can scope likely laws." });
+    }
+    return issues;
+  }
+
+  return [];
+}
 
 export default function AssessPage() {
   const router = useRouter();
@@ -78,7 +124,7 @@ export default function AssessPage() {
     }
   }, []);
 
-  function toggleMulti(field: "target_markets" | "use_cases", value: string) {
+function toggleMulti(field: "target_markets" | "use_cases" | "data_types", value: string) {
     setForm((prev) => {
       const current = prev[field] as string[];
       return {
@@ -104,7 +150,13 @@ export default function AssessPage() {
       });
 
       if (!res.ok) {
-        throw new Error("Server error");
+        const payload = await res.json().catch(() => ({ error: null }));
+        const message = typeof payload?.error === "string" && payload.error.trim()
+          ? payload.error
+          : res.status === 429
+            ? "You have hit the assessment rate limit. Wait a few minutes and try again."
+            : "The assessment could not be completed right now. Review your inputs and try again.";
+        throw new Error(message);
       }
 
       const { id, results } = await res.json();
@@ -112,11 +164,13 @@ export default function AssessPage() {
       sessionStorage.setItem(`assessment-input-${id}`, JSON.stringify(form));
       sessionStorage.setItem("assessment-draft", JSON.stringify(form));
       router.push(`/assess/results/${id}`);
-    } catch {
-      setError("Something went wrong. Please try again.");
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Something went wrong. Please try again.");
       setSubmitting(false);
     }
   }
+
+  const stepIssues = step >= 0 ? getStepValidationIssues(step, form) : [];
 
   return (
     <main className="page">
@@ -154,25 +208,39 @@ export default function AssessPage() {
             <ActivePresetBanner form={form} onChangePreset={() => setStep(-1)} />
             <div className="assess-progress">
               {STEPS.map((label, index) => (
-                <div
+                <button
                   key={label}
+                  type="button"
                   className={`assess-step ${index === step ? "assess-step--active" : ""} ${index < step ? "assess-step--done" : ""}`}
                   onClick={() => index < step && setStep(index)}
                   style={{ cursor: index < step ? "pointer" : "default" }}
+                  disabled={index > step}
+                  aria-current={index === step ? "step" : undefined}
                 >
                   <span className="assess-step__num">{index < step ? "✓" : index + 1}</span>
                   <span className="assess-step__label">{label}</span>
-                </div>
+                </button>
               ))}
             </div>
 
-            <div className="content-card" style={{ marginTop: "1.5rem" }}>
+            <div className="content-card" style={{ marginTop: "1.5rem" }} aria-busy={submitting}>
               {step === 0 && <StepCompany form={form} set={set} toggleMulti={toggleMulti} />}
               {step === 1 && <StepProduct form={form} set={set} toggleMulti={toggleMulti} />}
-              {step === 2 && <StepTechnical form={form} set={set} />}
+              {step === 2 && <StepTechnical form={form} set={set} toggleMulti={toggleMulti} />}
               {step === 3 && <StepReview form={form} />}
 
-              {error ? <p style={{ color: "var(--red)", marginTop: "1rem" }}>{error}</p> : null}
+              {stepIssues.length > 0 ? (
+                <div className="callout" role="status" aria-live="polite" style={{ marginTop: "1rem", borderColor: "rgba(244,162,97,0.35)", background: "rgba(244,162,97,0.12)" }}>
+                  <p style={{ margin: "0 0 0.35rem", fontWeight: 700, color: "var(--navy)" }}>Complete these required fields before continuing:</p>
+                  <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "var(--muted)", fontSize: "0.9rem", lineHeight: 1.55 }}>
+                    {stepIssues.map((issue) => (
+                      <li key={issue.field}>{issue.message}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {error ? <p role="alert" style={{ color: "var(--red)", marginTop: "1rem" }}>{error}</p> : null}
 
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1.75rem" }}>
                 {step > 0 ? (
@@ -189,7 +257,7 @@ export default function AssessPage() {
                   <button
                     className="button button--primary"
                     onClick={() => setStep((current) => current + 1)}
-                    disabled={!canAdvance(step, form)}
+                    disabled={stepIssues.length > 0}
                   >
                     Next →
                   </button>
@@ -327,9 +395,7 @@ function PresetPicker({
 }
 
 function canAdvance(step: number, form: AssessmentInput): boolean {
-  if (step === 0) return Boolean(form.hq_region && form.target_markets.length > 0);
-  if (step === 1) return Boolean(form.product_type && form.use_cases.length > 0);
-  return true;
+  return getStepValidationIssues(step, form).length === 0;
 }
 
 function StepCompany({
@@ -339,19 +405,34 @@ function StepCompany({
 }: {
   form: AssessmentInput;
   set: (field: keyof AssessmentInput, value: unknown) => void;
-  toggleMulti: (field: "target_markets" | "use_cases", value: string) => void;
+  toggleMulti: (field: "target_markets" | "use_cases" | "data_types", value: string) => void;
 }) {
   return (
     <div>
       <h2 style={{ margin: "0 0 1.25rem", color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.5rem" }}>Company Profile</h2>
+      <div className="field" style={{ marginBottom: "1.25rem" }}>
+        <label htmlFor="system_description">Describe your AI system *</label>
+        <textarea
+          id="system_description"
+          value={form.system_description ?? ""}
+          onChange={(event) => set("system_description", event.target.value)}
+          placeholder="Example: We built an AI hiring tool that screens resumes, ranks candidates, and helps recruiters decide who to interview in the EU and US."
+          rows={5}
+          required
+          aria-invalid={!form.system_description?.trim()}
+        />
+        <p style={{ margin: "0.45rem 0 0", color: "var(--muted)", fontSize: "0.84rem", lineHeight: 1.55 }}>
+          This drives the classification layer. We use it to infer likely use cases, risk posture, and missing compliance signals.
+        </p>
+      </div>
       <div className="form-grid">
         <div className="field">
-          <label>Company name (optional)</label>
-          <input type="text" value={form.company_name ?? ""} onChange={(event) => set("company_name", event.target.value)} placeholder="Acme AI Inc." />
+          <label htmlFor="company_name">Company name (optional)</label>
+          <input id="company_name" type="text" value={form.company_name ?? ""} onChange={(event) => set("company_name", event.target.value)} placeholder="Acme AI Inc." />
         </div>
         <div className="field">
-          <label>Company size</label>
-          <select value={form.company_size} onChange={(event) => set("company_size", event.target.value)}>
+          <label htmlFor="company_size">Company size</label>
+          <select id="company_size" value={form.company_size} onChange={(event) => set("company_size", event.target.value)}>
             <option value="startup">Startup (&lt;50 employees)</option>
             <option value="sme">SME (50-250)</option>
             <option value="large">Large (250-5000)</option>
@@ -359,8 +440,8 @@ function StepCompany({
           </select>
         </div>
         <div className="field">
-          <label>HQ Region *</label>
-          <select value={form.hq_region} onChange={(event) => set("hq_region", event.target.value)}>
+          <label htmlFor="hq_region">HQ Region *</label>
+          <select id="hq_region" value={form.hq_region} onChange={(event) => set("hq_region", event.target.value)} required aria-invalid={!form.hq_region}>
             <option value="">Select region...</option>
             {TARGET_MARKETS.map((market) => (
               <option key={market.code} value={market.code}>
@@ -371,8 +452,9 @@ function StepCompany({
           </select>
         </div>
         <div className="field">
-          <label>Industry (optional)</label>
+          <label htmlFor="industry">Industry (optional)</label>
           <input
+            id="industry"
             type="text"
             value={form.industry ?? ""}
             onChange={(event) => set("industry", event.target.value)}
@@ -385,8 +467,8 @@ function StepCompany({
           Preset defaults loaded for company size, HQ region, industry, and target markets. You can edit any of them.
         </p>
       ) : null}
-      <div className="field" style={{ marginTop: "1.25rem" }}>
-        <label>Target markets * (select all that apply)</label>
+      <fieldset className="field" style={{ marginTop: "1.25rem" }}>
+        <legend style={{ fontWeight: 700, color: "var(--navy)", marginBottom: "0.45rem" }}>Target markets * (select all that apply)</legend>
         <div className="chip-cloud" style={{ marginTop: "0.65rem" }}>
           {TARGET_MARKETS.map((market) => (
             <button
@@ -394,12 +476,13 @@ function StepCompany({
               type="button"
               className={`chip ${form.target_markets.includes(market.code) ? "chip--selected" : ""}`}
               onClick={() => toggleMulti("target_markets", market.code)}
+              aria-pressed={form.target_markets.includes(market.code)}
             >
               {market.label}
             </button>
           ))}
         </div>
-      </div>
+      </fieldset>
     </div>
   );
 }
@@ -411,7 +494,7 @@ function StepProduct({
 }: {
   form: AssessmentInput;
   set: (field: keyof AssessmentInput, value: unknown) => void;
-  toggleMulti: (field: "target_markets" | "use_cases", value: string) => void;
+  toggleMulti: (field: "target_markets" | "use_cases" | "data_types", value: string) => void;
 }) {
   const preset = getProductPresetById(form.product_preset);
 
@@ -427,8 +510,8 @@ function StepProduct({
       ) : null}
       <div className="form-grid">
         <div className="field">
-          <label>Product type *</label>
-          <select value={form.product_type} onChange={(event) => set("product_type", event.target.value)}>
+          <label htmlFor="product_type">Product type *</label>
+          <select id="product_type" value={form.product_type} onChange={(event) => set("product_type", event.target.value)}>
             <option value="saas">SaaS Product</option>
             <option value="ai_model">AI Model / API</option>
             <option value="embedded">AI-Embedded Product</option>
@@ -438,8 +521,8 @@ function StepProduct({
           </select>
         </div>
         <div className="field">
-          <label>Deployment context</label>
-          <select value={form.deployment_context} onChange={(event) => set("deployment_context", event.target.value)}>
+          <label htmlFor="deployment_context">Deployment context</label>
+          <select id="deployment_context" value={form.deployment_context} onChange={(event) => set("deployment_context", event.target.value)}>
             <option value="public">Public (B2C)</option>
             <option value="enterprise">Enterprise (B2B)</option>
             <option value="consumer">Consumer App</option>
@@ -447,8 +530,8 @@ function StepProduct({
           </select>
         </div>
       </div>
-      <div className="field" style={{ marginTop: "1.25rem" }}>
-        <label>Use cases * (select all that apply)</label>
+      <fieldset className="field" style={{ marginTop: "1.25rem" }}>
+        <legend style={{ fontWeight: 700, color: "var(--navy)", marginBottom: "0.45rem" }}>Use cases * (select all that apply)</legend>
         <div className="chip-cloud" style={{ marginTop: "0.65rem" }}>
           {USE_CASE_OPTIONS.map((useCase) => (
             <button
@@ -456,12 +539,13 @@ function StepProduct({
               type="button"
               className={`chip ${form.use_cases.includes(useCase.value) ? "chip--selected" : ""}`}
               onClick={() => toggleMulti("use_cases", useCase.value)}
+              aria-pressed={form.use_cases.includes(useCase.value)}
             >
               {useCase.label}
             </button>
           ))}
         </div>
-      </div>
+      </fieldset>
       {preset ? (
         <p style={{ margin: "0.8rem 0 0", color: "var(--muted)", fontSize: "0.85rem" }}>
           If this preset is right, most users only need to adjust markets or one or two toggles before submitting.
@@ -474,9 +558,11 @@ function StepProduct({
 function StepTechnical({
   form,
   set,
+  toggleMulti,
 }: {
   form: AssessmentInput;
   set: (field: keyof AssessmentInput, value: unknown) => void;
+  toggleMulti: (field: "target_markets" | "use_cases" | "data_types", value: string) => void;
 }) {
   const Toggle = ({
     field,
@@ -505,6 +591,8 @@ function StepTechnical({
       <button
         type="button"
         onClick={() => set(field, !form[field])}
+        role="switch"
+        aria-checked={Boolean(form[field])}
         style={{
           padding: "0.5rem 1.25rem",
           borderRadius: "999px",
@@ -531,9 +619,25 @@ function StepTechnical({
         <Toggle field="uses_biometric_data" label="Does your product use biometric data?" hint="Face recognition, fingerprints, voice, gait, or similar signals." />
         <Toggle field="automated_decisions" label="Does your product make automated decisions?" hint="Decisions with legal or similarly significant effects on people." />
       </div>
+      <fieldset className="field" style={{ marginTop: "1.25rem" }}>
+        <legend style={{ fontWeight: 700, color: "var(--navy)", marginBottom: "0.45rem" }}>Primary data types in scope</legend>
+        <div className="chip-cloud" style={{ marginTop: "0.65rem" }}>
+          {DATA_TYPE_OPTIONS.map((dataType) => (
+            <button
+              key={dataType.value}
+              type="button"
+              className={`chip ${form.data_types?.includes(dataType.value) ? "chip--selected" : ""}`}
+              onClick={() => toggleMulti("data_types", dataType.value)}
+              aria-pressed={Boolean(form.data_types?.includes(dataType.value))}
+            >
+              {dataType.label}
+            </button>
+          ))}
+        </div>
+      </fieldset>
       <div className="field" style={{ marginTop: "1.25rem" }}>
-        <label>Your risk self-assessment</label>
-        <select value={form.risk_self_assessment} onChange={(event) => set("risk_self_assessment", event.target.value)}>
+        <label htmlFor="risk_self_assessment">Your risk self-assessment</label>
+        <select id="risk_self_assessment" value={form.risk_self_assessment} onChange={(event) => set("risk_self_assessment", event.target.value)}>
           <option value="minimal">Minimal risk</option>
           <option value="limited">Limited risk</option>
           <option value="high">High risk</option>
@@ -554,6 +658,7 @@ function StepReview({ form }: { form: AssessmentInput }) {
       <p style={{ color: "var(--muted)", margin: "0 0 1.25rem" }}>Confirm your inputs before running the analysis.</p>
       <dl className="review-dl">
         <ReviewRow label="Preset" value={preset?.title ?? "Blank assessment"} />
+        <ReviewRow label="System Description" value={form.system_description || "-"} />
         <ReviewRow label="HQ Region" value={form.hq_region || "-"} />
         <ReviewRow label="Company Size" value={form.company_size} />
         <ReviewRow label="Target Markets" value={form.target_markets.join(", ") || "None selected"} />
@@ -565,6 +670,7 @@ function StepReview({ form }: { form: AssessmentInput }) {
         <ReviewRow label="Processes EU Personal Data" value={yesNo(form.processes_eu_personal_data)} />
         <ReviewRow label="Uses Biometric Data" value={yesNo(form.uses_biometric_data)} />
         <ReviewRow label="Automated Decisions" value={yesNo(form.automated_decisions)} />
+        <ReviewRow label="Data Types" value={form.data_types?.join(", ") || "-"} />
         <ReviewRow label="Risk Self-Assessment" value={form.risk_self_assessment ?? "-"} />
       </dl>
       <div className="callout" style={{ marginTop: "1.25rem" }}>

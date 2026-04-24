@@ -12,6 +12,7 @@ export type AssessmentInput = {
   // Company
   company_name?: string;
   product_preset?: string;
+  system_description?: string;
   hq_region: string; // EU | US | UK | CA | CN | BR | SG | AU | Other
   company_size: "startup" | "sme" | "large" | "enterprise";
   industry?: string;
@@ -28,6 +29,7 @@ export type AssessmentInput = {
   processes_personal_data: boolean;
   processes_eu_personal_data: boolean;
   automated_decisions: boolean;
+  data_types?: string[];
   risk_self_assessment?: string; // minimal | limited | high | unacceptable
 };
 

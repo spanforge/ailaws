@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { isRegulatoryAlertDeliveryConfigured } from "@/lib/alert-delivery";
+import { getUserComplianceAlerts, syncUserComplianceAlerts } from "@/lib/compliance-alerts";
 
 /**
  * GET /api/alerts
@@ -11,6 +12,8 @@ import { isRegulatoryAlertDeliveryConfigured } from "@/lib/alert-delivery";
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  await syncUserComplianceAlerts(session.user.id);
 
   const prefs = await prisma.alertPreference.findMany({
     where: { userId: session.user.id },
@@ -62,5 +65,12 @@ export async function GET() {
     lawJurisdiction: lawMap[e.lawSlug]?.jurisdiction ?? "",
   }));
 
-  return NextResponse.json({ data: enriched, prefs, deliveryConfigured: isRegulatoryAlertDeliveryConfigured() });
+  const complianceAlerts = await getUserComplianceAlerts(session.user.id);
+
+  return NextResponse.json({
+    data: enriched,
+    prefs,
+    deliveryConfigured: isRegulatoryAlertDeliveryConfigured(),
+    complianceAlerts,
+  });
 }

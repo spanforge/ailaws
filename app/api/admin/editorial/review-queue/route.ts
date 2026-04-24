@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { log } from "@/lib/monitoring";
+import { withRequestId } from "@/lib/request-context";
 
 async function requireAdmin() {
   const session = await auth();
@@ -36,6 +37,9 @@ export async function GET(req: NextRequest) {
       reviewStatus: true,
       confidenceLevel: true,
       sourceKind: true,
+      sourceAuthority: true,
+      sourceCitationFull: true,
+      editorNotes: true,
       verifiedAt: true,
       lastReviewedAt: true,
       updatedAt: true,
@@ -54,12 +58,16 @@ export async function GET(req: NextRequest) {
     select: {
       id: true,
       title: true,
+      category: true,
+      priority: true,
+      sourceCitationFull: true,
+      sourceExcerpt: true,
       lawId: true,
       reviewStatus: true,
       confidenceLevel: true,
       sourceKind: true,
       verifiedAt: true,
-      law: { select: { slug: true, shortTitle: true } },
+      law: { select: { slug: true, shortTitle: true, jurisdiction: true, sourceHealthStatus: true } },
     },
     take: 200,
   });
@@ -98,15 +106,80 @@ export async function GET(req: NextRequest) {
   else if (sortBy === "affected") sortedLaws = [...enrichedLaws].sort((a, b) => b.affectedUsers - a.affectedUsers);
   else sortedLaws = [...enrichedLaws].sort((a, b) => b.riskScore - a.riskScore);
 
+  const enrichedObligations = obligationsNeedingReview
+    .map((obligation) => {
+      const reasons: string[] = [];
+      if (obligation.reviewStatus === "draft") reasons.push("Not yet reviewed");
+      if (obligation.reviewStatus === "needs_review") reasons.push("Returned for review");
+      if (!obligation.sourceKind || obligation.sourceKind === "editorial_summary") reasons.push("Weak provenance");
+      if (!obligation.sourceCitationFull) reasons.push("Missing full citation");
+      if (!obligation.sourceExcerpt) reasons.push("Missing source note");
+      if (obligation.law.sourceHealthStatus === "broken") reasons.push("Parent law source broken");
+
+      const riskScore =
+        (obligation.priority === "critical" ? 30 : obligation.priority === "high" ? 18 : 8) +
+        (obligation.confidenceLevel === "low" ? 22 : obligation.confidenceLevel === "medium" ? 10 : 0) +
+        (!obligation.sourceCitationFull ? 18 : 0) +
+        (!obligation.sourceExcerpt ? 12 : 0) +
+        (obligation.law.sourceHealthStatus === "broken" ? 20 : 0);
+
+      return {
+        ...obligation,
+        reasons,
+        riskScore,
+      };
+    })
+    .sort((a, b) => {
+      if (sortBy === "overdue") return (b.verifiedAt ? b.verifiedAt.getTime() : 0) - (a.verifiedAt ? a.verifiedAt.getTime() : 0);
+      if (sortBy === "affected") return (b.priority === "critical" ? 3 : b.priority === "high" ? 2 : 1) - (a.priority === "critical" ? 3 : a.priority === "high" ? 2 : 1);
+      return b.riskScore - a.riskScore;
+    });
+
+  const entityIds = [
+    ...sortedLaws.map((law) => law.id),
+    ...enrichedObligations.map((obligation) => obligation.id),
+  ];
+
+  const auditEntries = entityIds.length > 0
+    ? await prisma.contentEditAuditLog.findMany({
+        where: {
+          entityId: { in: entityIds },
+          entityType: { in: ["law", "obligation"] },
+        },
+        include: {
+          actor: { select: { id: true, name: true, email: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      })
+    : [];
+
+  const auditEntriesByEntity = auditEntries.reduce<Record<string, typeof auditEntries>>((accumulator, entry) => {
+    (accumulator[entry.entityId] ??= []).push(entry);
+    return accumulator;
+  }, {});
+
   log("info", "editorial.review_queue.viewed", {
     actorId: session.user?.id,
     lawCount: sortedLaws.length,
     obligationCount: obligationsNeedingReview.length,
+    ...withRequestId(req),
   });
 
   return NextResponse.json({
-    laws: sortedLaws,
-    obligations: obligationsNeedingReview,
+    laws: sortedLaws.map((law) => ({
+      ...law,
+      recentAuditEntries: (auditEntriesByEntity[law.id] ?? []).slice(0, 5).map((entry) => ({
+        ...entry,
+        eventType: entry.changeReason?.toLowerCase().includes("reverted") ? "revert" : "edit",
+      })),
+    })),
+    obligations: enrichedObligations.map((obligation) => ({
+      ...obligation,
+      recentAuditEntries: (auditEntriesByEntity[obligation.id] ?? []).slice(0, 5).map((entry) => ({
+        ...entry,
+        eventType: entry.changeReason?.toLowerCase().includes("reverted") ? "revert" : "edit",
+      })),
+    })),
     pendingApprovals,
     summary: {
       totalLawsNeedingReview: sortedLaws.length,

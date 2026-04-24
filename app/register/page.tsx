@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, FormEvent } from "react";
+import { Suspense, useEffect, useState, FormEvent } from "react";
 import { getProviders, signIn } from "next-auth/react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -17,7 +17,7 @@ function getSafeCallbackUrl(value: string | null) {
   return value;
 }
 
-export default function RegisterPage() {
+function RegisterPageContent() {
   const searchParams = useSearchParams();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -156,6 +156,29 @@ export default function RegisterPage() {
             Sign in
           </Link>
         </p>
+      </div>
+    </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<AuthPageFallback heading="Create your account" note="Preparing registration…" />}>
+      <RegisterPageContent />
+    </Suspense>
+  );
+}
+
+function AuthPageFallback({ heading, note }: { heading: string; note: string }) {
+  return (
+    <div className="auth-page">
+      <div className="auth-card">
+        <div className="auth-brand">
+          <span className="auth-logo">Spanforge Compass</span>
+          <p className="auth-tagline">AI Compliance Evidence Workspace</p>
+        </div>
+        <h1 className="auth-heading">{heading}</h1>
+        <p className="auth-note">{note}</p>
       </div>
     </div>
   );

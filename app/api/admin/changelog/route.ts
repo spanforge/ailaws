@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { recordActionAudit } from "@/lib/action-audit";
 import { captureException, log } from "@/lib/monitoring";
 import { sendRegulatoryAlertEmail } from "@/lib/alert-delivery";
+import { withRequestId } from "@/lib/request-context";
 
 async function requireAdmin() {
   const session = await auth();
@@ -129,6 +131,7 @@ export async function POST(req: NextRequest) {
       lawSlug: law.slug,
       recipientsMatched: dedupedRecipients.size,
       deliveredCount,
+      ...withRequestId(req),
     });
   } catch (error) {
     await captureException(error, {
@@ -136,6 +139,17 @@ export async function POST(req: NextRequest) {
       extra: { lawSlug: law.slug, entryId: entry.id },
     });
   }
+
+  await recordActionAudit({
+    actorId: session.user?.id,
+    actorEmail: session.user?.email,
+    actionType: "admin.changelog.create",
+    scope: "admin",
+    targetType: "lawChangelog",
+    targetId: entry.id,
+    request: req,
+    metadata: { lawSlug: entry.lawSlug, changeType: entry.changeType },
+  });
 
   return NextResponse.json({ data: entry }, { status: 201 });
 }
@@ -153,5 +167,17 @@ export async function DELETE(req: NextRequest) {
   if (!entry) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   await prisma.lawChangelog.delete({ where: { id } });
+
+  await recordActionAudit({
+    actorId: session.user?.id,
+    actorEmail: session.user?.email,
+    actionType: "admin.changelog.delete",
+    scope: "admin",
+    targetType: "lawChangelog",
+    targetId: id,
+    request: req,
+    metadata: { lawSlug: entry.lawSlug, changeType: entry.changeType },
+  });
+
   return NextResponse.json({ ok: true });
 }

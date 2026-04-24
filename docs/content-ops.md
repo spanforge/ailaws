@@ -83,6 +83,16 @@ For laws flagged with `review_status: "needs_review"`:
 2. The review queue lists all laws pending review.
 3. Click "Approve" to verify, or "Request changes" to flag for follow-up.
 4. Approvals are logged in the `ContentApproval` table for audit.
+5. Reverts and field-level edits are available through the editorial audit surfaces.
+
+## Auditability and trust operations
+
+- Editorial field changes are persisted in `ContentEditAuditLog`.
+- Sensitive workspace and admin operations are persisted in `ActionAuditLog`.
+- Admin audit surfaces:
+  - `GET /api/admin/editorial/audit-log`
+  - `GET /api/admin/action-audit`
+- Source-health automation is scheduled through `POST /api/cron/source-validation` and visible in `/admin/sources`.
 
 ## Source URL Validation
 
@@ -105,6 +115,8 @@ Dry run (no DB writes):
 ```bash
 npm run source:validate:dry
 ```
+
+For production, keep the scheduled cron enabled in `vercel.json` and use dry runs only for staging checks.
 
 ## Content Quality Standards
 

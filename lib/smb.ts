@@ -215,6 +215,17 @@ export type AssessmentDeltaSummary = {
   unchangedTopMatches: string[];
 };
 
+export type AssessmentDiffEntry = {
+  lawSlug: string;
+  lawShortTitle: string;
+  previousStatus: AssessmentResult["applicability_status"] | "not_applicable";
+  currentStatus: AssessmentResult["applicability_status"] | "not_applicable";
+  previousScore: number;
+  currentScore: number;
+  scoreDelta: number;
+  changeType: "new" | "reduced" | "increased" | "decreased" | "unchanged";
+};
+
 const ACTION_TIMELINE_LABELS: Record<ActionTimeline, string> = {
   this_week: "This week",
   this_month: "This month",
@@ -733,6 +744,59 @@ export function buildAssessmentDeltaSummary(
     newlyDowngraded,
     unchangedTopMatches,
   };
+}
+
+export function buildAssessmentDiff(
+  currentResults: AssessmentResult[],
+  previousResults?: AssessmentResult[] | null,
+): AssessmentDiffEntry[] {
+  if (!previousResults || previousResults.length === 0) {
+    return [];
+  }
+
+  const currentBySlug = new Map(currentResults.map((result) => [result.law_slug, result]));
+  const previousBySlug = new Map(previousResults.map((result) => [result.law_slug, result]));
+  const allSlugs = Array.from(new Set([...currentBySlug.keys(), ...previousBySlug.keys()]));
+
+  const rank = (status: AssessmentResult["applicability_status"] | "not_applicable") => {
+    if (status === "likely_applies") return 3;
+    if (status === "may_apply") return 2;
+    if (status === "unlikely") return 1;
+    return 0;
+  };
+
+  return allSlugs
+    .map((slug) => {
+      const current = currentBySlug.get(slug);
+      const previous = previousBySlug.get(slug);
+      const currentStatus: AssessmentDiffEntry["currentStatus"] = current?.applicability_status ?? "not_applicable";
+      const previousStatus: AssessmentDiffEntry["previousStatus"] = previous?.applicability_status ?? "not_applicable";
+      const currentScore = current?.relevance_score ?? 0;
+      const previousScore = previous?.relevance_score ?? 0;
+      const scoreDelta = Number((currentScore - previousScore).toFixed(3));
+
+      let changeType: AssessmentDiffEntry["changeType"] = "unchanged";
+      if (rank(currentStatus) > rank(previousStatus)) {
+        changeType = previousStatus === "not_applicable" ? "new" : "increased";
+      } else if (rank(currentStatus) < rank(previousStatus)) {
+        changeType = currentStatus === "not_applicable" ? "reduced" : "decreased";
+      } else if (Math.abs(scoreDelta) >= 0.1) {
+        changeType = scoreDelta > 0 ? "increased" : "decreased";
+      }
+
+      return {
+        lawSlug: slug,
+        lawShortTitle: current?.law_short_title ?? previous?.law_short_title ?? slug,
+        previousStatus,
+        currentStatus,
+        previousScore,
+        currentScore,
+        scoreDelta,
+        changeType,
+      };
+    })
+    .filter((entry) => entry.changeType !== "unchanged")
+    .sort((left, right) => Math.abs(right.scoreDelta) - Math.abs(left.scoreDelta));
 }
 
 export type TemplateEntry = {

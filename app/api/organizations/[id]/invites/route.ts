@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { recordActionAudit } from "@/lib/action-audit";
 import { captureException } from "@/lib/monitoring";
 import { prisma } from "@/lib/prisma";
 import { buildWorkspaceInviteUrl, sendWorkspaceInviteEmail } from "@/lib/workspace-email";
@@ -20,6 +21,18 @@ export async function POST(req: NextRequest, { params }: Props) {
   });
 
   if (!membership) {
+    await recordActionAudit({
+      actorId: session.user.id,
+      actorEmail: session.user.email,
+      actionType: "organization.invite.create",
+      scope: "organization",
+      status: "denied",
+      organizationId: id,
+      targetType: "organization",
+      targetId: id,
+      request: req,
+      metadata: { reason: "missing_manage_membership" },
+    });
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -61,6 +74,18 @@ export async function POST(req: NextRequest, { params }: Props) {
       });
     }
 
+    await recordActionAudit({
+      actorId: session.user.id,
+      actorEmail: session.user.email,
+      actionType: "organization.invite.resent",
+      scope: "organization",
+      organizationId: id,
+      targetType: "organizationInvite",
+      targetId: duplicateInvite.id,
+      request: req,
+      metadata: { email },
+    });
+
     return NextResponse.json({ data: duplicateInvite }, { status: 200 });
   }
 
@@ -89,6 +114,18 @@ export async function POST(req: NextRequest, { params }: Props) {
       extra: { organizationId: organization.id, inviteId: invite.id, email },
     });
   }
+
+  await recordActionAudit({
+    actorId: session.user.id,
+    actorEmail: session.user.email,
+    actionType: "organization.invite.create",
+    scope: "organization",
+    organizationId: id,
+    targetType: "organizationInvite",
+    targetId: invite.id,
+    request: req,
+    metadata: { email, expiresAt: invite.expiresAt.toISOString() },
+  });
 
   return NextResponse.json({ data: invite }, { status: 201 });
 }

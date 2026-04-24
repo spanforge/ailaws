@@ -2,10 +2,13 @@
 
 ## Overview
 
-LexForge uses **Vitest 4** for unit and smoke tests. Tests live in `tests/`.
+LexForge uses **Vitest 4** for unit, integration, and smoke tests. Tests live in `tests/`.
 
 ```
 tests/
+  integration/
+    ci-events-route.test.ts
+    cron-source-validation-route.test.ts
   unit/
     rules-engine.test.ts   # 17 tests — rules engine logic
     lexforge-data.test.ts  # 17 tests — law data integrity
@@ -18,6 +21,7 @@ tests/
 
 ```bash
 npm test                  # run all tests once
+npm run test:integration  # route-level integration tests
 npm run test:unit         # unit tests only
 npm run test:smoke        # smoke tests only
 npm run test:watch        # watch mode (re-runs on file change)
@@ -51,16 +55,30 @@ Smoke tests in `tests/smoke/` verify end-to-end critical paths using real produc
 - Run in under 5 seconds total.
 - Not require a database or network connection.
 
+### Integration test conventions
+
+Integration tests in `tests/integration/` should:
+
+- exercise a real route module or service boundary
+- mock only external infrastructure edges such as Prisma, mail, or network delivery
+- assert auth, input validation, and the primary side effect for the route under test
+
 ## CI Integration
 
-Add to your CI pipeline:
+The repository CI pipeline already runs:
 
 ```yaml
 - name: Type check
   run: npm run typecheck
 
-- name: Tests
-  run: npm test
+- name: Unit tests
+  run: npm run test:unit
+
+- name: Integration tests
+  run: npm run test:integration
+
+- name: Smoke tests
+  run: npm run test:smoke
 ```
 
 ## Test Coverage Goals
@@ -70,7 +88,7 @@ Add to your CI pipeline:
 | Rules engine logic | 90%+ |
 | Law data integrity | 100% (all laws have required fields) |
 | Rate limiter | 100% |
-| API routes | Manual + smoke coverage |
+| API routes | Integration coverage for critical routes + smoke coverage |
 
 ## Debugging Failing Tests
 

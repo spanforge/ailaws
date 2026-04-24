@@ -13,9 +13,9 @@ export async function PATCH(req: NextRequest, { params }: Props) {
   }
 
   const { id: checklistId, itemId } = await params;
-  const body = (await req.json()) as { status: string };
+  const body = (await req.json()) as { status?: string; assigneeId?: string | null };
 
-  if (!VALID_STATUSES.includes(body.status as (typeof VALID_STATUSES)[number])) {
+  if (body.status && !VALID_STATUSES.includes(body.status as (typeof VALID_STATUSES)[number])) {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
 
@@ -38,9 +38,47 @@ export async function PATCH(req: NextRequest, { params }: Props) {
     return NextResponse.json({ error: "Item not found" }, { status: 404 });
   }
 
+  let nextAssigneeId: string | null | undefined = undefined;
+  if (body.assigneeId !== undefined) {
+    if (body.assigneeId === null || body.assigneeId === "") {
+      nextAssigneeId = null;
+    } else {
+      const assignee = await prisma.user.findUnique({
+        where: { id: body.assigneeId },
+        select: { id: true },
+      });
+      if (!assignee) {
+        return NextResponse.json({ error: "Assignee not found" }, { status: 404 });
+      }
+      if (body.assigneeId !== session.user.id) {
+        const sharedMembership = await prisma.organizationMember.findFirst({
+          where: {
+            userId: session.user.id,
+            organization: {
+              members: {
+                some: { userId: body.assigneeId },
+              },
+            },
+          },
+          select: { id: true },
+        });
+        if (!sharedMembership) {
+          return NextResponse.json({ error: "Assignee must share a workspace with you" }, { status: 400 });
+        }
+      }
+      nextAssigneeId = body.assigneeId;
+    }
+  }
+
   const updated = await prisma.checklistItem.update({
     where: { id: itemId },
-    data: { status: body.status },
+    data: {
+      ...(body.status ? { status: body.status } : {}),
+      ...(nextAssigneeId !== undefined ? { assigneeId: nextAssigneeId } : {}),
+    },
+    include: {
+      assignee: { select: { id: true, name: true, email: true } },
+    },
   });
 
   return NextResponse.json(updated);

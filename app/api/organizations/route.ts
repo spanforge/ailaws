@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { recordActionAudit } from "@/lib/action-audit";
 import { captureException } from "@/lib/monitoring";
 import { prisma } from "@/lib/prisma";
 import { sendWorkspaceCreatedEmail } from "@/lib/workspace-email";
@@ -13,6 +14,7 @@ export async function GET() {
     include: {
       organization: {
         include: {
+          integrationSettings: true,
           members: {
             include: {
               user: { select: { id: true, name: true, email: true } },
@@ -46,6 +48,7 @@ export async function GET() {
         expiresAt: invite.expiresAt,
         createdAt: invite.createdAt,
       })),
+      integrationSettings: membership.organization.integrationSettings,
     })),
   });
 }
@@ -64,6 +67,17 @@ export async function POST(req: NextRequest) {
 
   const existing = await prisma.organization.findUnique({ where: { slug } });
   if (existing) {
+    await recordActionAudit({
+      actorId: session.user.id,
+      actorEmail: session.user.email,
+      actionType: "organization.create",
+      scope: "organization",
+      status: "denied",
+      targetType: "organization",
+      targetId: existing.id,
+      request: req,
+      metadata: { slug, reason: "slug_conflict" },
+    });
     return NextResponse.json({ error: "Slug already in use" }, { status: 409 });
   }
 
@@ -71,6 +85,9 @@ export async function POST(req: NextRequest) {
     data: {
       name,
       slug,
+      integrationSettings: {
+        create: {},
+      },
       members: {
         create: {
           userId: session.user.id,
@@ -95,6 +112,18 @@ export async function POST(req: NextRequest) {
       });
     }
   }
+
+  await recordActionAudit({
+    actorId: session.user.id,
+    actorEmail: session.user.email,
+    actionType: "organization.create",
+    scope: "organization",
+    organizationId: organization.id,
+    targetType: "organization",
+    targetId: organization.id,
+    request: req,
+    metadata: { slug: organization.slug, role: "owner" },
+  });
 
   return NextResponse.json({ data: organization }, { status: 201 });
 }

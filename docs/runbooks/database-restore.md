@@ -48,6 +48,15 @@ pg_restore -d lexforge_restore backup-<timestamp>.pgdump
 # 4. Restart the application
 ```
 
+### Restore drill discipline
+
+Run a restore drill at least once per quarter:
+
+1. Restore the latest backup into a non-production database.
+2. Run the integrity checks below.
+3. Start the app against the restored database and verify `/api/health`.
+4. Record the restore timestamp, operator, backup artifact used, and result.
+
 ### Verifying Restore Integrity
 
 ```bash
@@ -89,6 +98,15 @@ Prisma does not support automatic rollbacks. To roll back:
 2. Remove the migration folder from `prisma/migrations/`.
 3. Run `npx prisma migrate resolve --rolled-back <migration_name>` if needed.
 4. Fix the migration and re-apply.
+
+### Deployment rollback checklist
+
+1. Confirm the target pre-change backup artifact exists.
+2. Stop writes to the application.
+3. Restore the backup into the rollback target database.
+4. Point `DATABASE_URL` at the restored database.
+5. Redeploy the last known good application build.
+6. Run verification checks for health, latest migration record, law count, and a sample authenticated workflow.
 
 ---
 

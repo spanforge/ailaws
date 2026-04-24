@@ -5,6 +5,7 @@
 - Node.js 20+
 - A PostgreSQL database (recommended for production) or SQLite (development only)
 - Environment variables configured — see [env-reference.md](env-reference.md)
+- CI configured to run `.github/workflows/ci.yml` on pull requests and `main`
 
 ## Build
 
@@ -26,6 +27,18 @@ npm start               # starts production server on port 3000
 6. Enable **Web Analytics** and **Speed Insights** in the Vercel project dashboard if you want Vercel Insights data collected in production.
 
 Vercel will run migrations automatically before each deployment.
+
+### Protected deployment path
+
+The repository includes GitHub Actions CI in `.github/workflows/ci.yml`.
+Expected merge gate:
+
+1. `npm run typecheck`
+2. `npm run test:unit`
+3. `npm run test:integration`
+4. `npm run test:smoke`
+
+Treat a failing CI run as a hard block for promotion.
 
 ### URL behavior on Vercel
 
@@ -104,6 +117,21 @@ Migrations are idempotent — safe to run `npx prisma migrate deploy` on every d
 - [ ] Run `npm run make-admin -- --email admin@example.com` to create the first admin user
 - [ ] Optionally set `NEXT_PUBLIC_SENTRY_DSN` for error tracking
 - [ ] Enable Vercel Web Analytics and Speed Insights in the Vercel dashboard
+- [ ] Set `CRON_SECRET` and verify `/api/cron/alerts/deliver` and `/api/cron/source-validation` are authorized
+- [ ] Configure `INTEGRATION_WEBHOOK_SECRET` if CI or GitHub release events should feed compliance drift
+
+## Staging Launch Review
+
+Run this review on a staging environment before production promotion:
+
+1. Verify `npm run typecheck`, `npm run test:unit`, `npm run test:integration`, and `npm run test:smoke` passed on the commit being promoted.
+2. Run `npm run build` against staging configuration.
+3. Run `npm run source:validate:dry` and review `/admin/sources` for broken or stale sources.
+4. Verify `/api/health` returns `{"status":"ok"}`.
+5. Exercise one authenticated assessment flow, one checklist mutation, and one evidence export.
+6. Confirm admin audit visibility at `/api/admin/action-audit` and `/api/admin/editorial/audit-log`.
+7. Confirm Sentry DSN, cron secret, and alert delivery sender env vars are present.
+8. Record the deployment candidate, reviewer, timestamp, and outcome in the release log before promoting.
 
 ## Promoting a User to Admin
 

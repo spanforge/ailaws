@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { recordActionAudit } from "@/lib/action-audit";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -81,6 +82,18 @@ export async function POST(req: NextRequest) {
   }
 
   if (invite.expiresAt <= new Date()) {
+    await recordActionAudit({
+      actorId: userId,
+      actorEmail: session.user.email,
+      actionType: "organization.invite.accept",
+      scope: "organization",
+      status: "denied",
+      organizationId: invite.organizationId,
+      targetType: "organizationInvite",
+      targetId: invite.id,
+      request: req,
+      metadata: { reason: "expired" },
+    });
     return NextResponse.json({ error: "Invite has expired" }, { status: 410 });
   }
 
@@ -103,6 +116,18 @@ export async function POST(req: NextRequest) {
       where: { id: invite.id },
       data: { acceptedAt: new Date() },
     });
+  });
+
+  await recordActionAudit({
+    actorId: userId,
+    actorEmail: session.user.email,
+    actionType: "organization.invite.accept",
+    scope: "organization",
+    organizationId: invite.organizationId,
+    targetType: "organizationInvite",
+    targetId: invite.id,
+    request: req,
+    metadata: { organizationSlug: invite.organization.slug },
   });
 
   return NextResponse.json({

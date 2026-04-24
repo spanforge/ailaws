@@ -30,6 +30,25 @@ type AlertPref = {
   id: string;
   lawSlug: string | null;
   jurisdiction: string | null;
+  emailEnabled?: boolean;
+  digestMode?: string;
+};
+
+type ComplianceAlert = {
+  id: string;
+  assessmentId: string | null;
+  alertType: string;
+  severity: "high" | "medium" | "low";
+  title: string;
+  message: string;
+  status: "open" | "acknowledged" | "resolved";
+  createdAt: string;
+  updatedAt: string;
+  assessment?: {
+    id: string;
+    name: string | null;
+    createdAt: string;
+  } | null;
 };
 
 type Organization = {
@@ -39,6 +58,12 @@ type Organization = {
   role: string;
   members: Array<{ id: string; name: string | null; email: string | null; role: string }>;
   invites: Array<{ id: string; email: string; createdAt: string; expiresAt: string }>;
+  integrationSettings?: {
+    id: string;
+    complianceEmailEnabled: boolean;
+    complianceSlackWebhookUrl: string | null;
+    notificationRole: string;
+  } | null;
 };
 
 const CHANGE_TYPE_LABEL: Record<string, string> = {
@@ -64,6 +89,7 @@ export default function AlertsPage() {
   const [entries, setEntries] = useState<ChangeEntry[]>([]);
   const [prefs, setPrefs] = useState<AlertPref[]>([]);
   const [deliveryConfigured, setDeliveryConfigured] = useState(false);
+  const [complianceAlerts, setComplianceAlerts] = useState<ComplianceAlert[]>([]);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [assessments, setAssessments] = useState<AssessmentMini[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,7 +98,13 @@ export default function AlertsPage() {
   const [addSlug, setAddSlug] = useState("");
   const [addJx, setAddJx] = useState("");
   const [saving, setSaving] = useState(false);
+  const [updatingPrefId, setUpdatingPrefId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState("all");
+  const [alertFilter, setAlertFilter] = useState<"all" | "open" | "acknowledged">("all");
+  const [refreshingCompliance, setRefreshingCompliance] = useState(false);
+  const [updatingAlertId, setUpdatingAlertId] = useState<string | null>(null);
+  const [orgRoutingDrafts, setOrgRoutingDrafts] = useState<Record<string, { complianceSlackWebhookUrl: string; notificationRole: string; complianceEmailEnabled: boolean }>>({});
+  const [updatingOrgId, setUpdatingOrgId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -82,10 +114,11 @@ export default function AlertsPage() {
       fetch("/api/assessments").catch(() => null),
     ]);
     if (alertsResponse.ok) {
-      const { data, prefs: p, deliveryConfigured: deliveryReady } = await alertsResponse.json();
+      const { data, prefs: p, deliveryConfigured: deliveryReady, complianceAlerts: workspaceAlerts } = await alertsResponse.json();
       setEntries(data ?? []);
       setPrefs(p ?? []);
       setDeliveryConfigured(Boolean(deliveryReady));
+      setComplianceAlerts(workspaceAlerts ?? []);
     }
     if (organizationsResponse && organizationsResponse.ok) {
       const { data } = await organizationsResponse.json();
@@ -128,7 +161,65 @@ export default function AlertsPage() {
     load();
   }
 
+  async function updatePref(id: string, patch: { emailEnabled?: boolean; digestMode?: string }) {
+    setUpdatingPrefId(id);
+    await fetch("/api/alerts/preferences", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, ...patch }),
+    });
+    setUpdatingPrefId(null);
+    load();
+  }
+
   const filtered = filterType === "all" ? entries : entries.filter((entry) => entry.changeType === filterType);
+  const filteredComplianceAlerts = complianceAlerts.filter((alert) => alertFilter === "all" ? true : alert.status === alertFilter);
+
+  async function refreshComplianceAlerts() {
+    setRefreshingCompliance(true);
+    await fetch("/api/alerts/refresh", { method: "POST" });
+    setRefreshingCompliance(false);
+    load();
+  }
+
+  async function updateComplianceAlert(alertId: string, nextStatus: "acknowledged" | "resolved") {
+    setUpdatingAlertId(alertId);
+    await fetch(`/api/alerts/compliance/${alertId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: nextStatus }),
+    });
+    setUpdatingAlertId(null);
+    load();
+  }
+
+  function setOrgDraft(organizationId: string, patch: Partial<{ complianceSlackWebhookUrl: string; notificationRole: string; complianceEmailEnabled: boolean }>) {
+    setOrgRoutingDrafts((current) => ({
+      ...current,
+      [organizationId]: {
+        complianceSlackWebhookUrl: current[organizationId]?.complianceSlackWebhookUrl ?? "",
+        notificationRole: current[organizationId]?.notificationRole ?? "owner",
+        complianceEmailEnabled: current[organizationId]?.complianceEmailEnabled ?? true,
+        ...patch,
+      },
+    }));
+  }
+
+  async function updateOrganizationRouting(organization: Organization) {
+    setUpdatingOrgId(organization.id);
+    const draft = orgRoutingDrafts[organization.id] ?? {
+      complianceSlackWebhookUrl: organization.integrationSettings?.complianceSlackWebhookUrl ?? "",
+      notificationRole: organization.integrationSettings?.notificationRole ?? "owner",
+      complianceEmailEnabled: organization.integrationSettings?.complianceEmailEnabled ?? true,
+    };
+    await fetch(`/api/organizations/${organization.id}/integrations`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(draft),
+    });
+    setUpdatingOrgId(null);
+    load();
+  }
 
   if (status === "loading" || loading) {
     return (
@@ -152,15 +243,16 @@ export default function AlertsPage() {
               Recent legal changes, in-app watchlists, and team visibility for the laws you track.
             </p>
           </div>
-          <button className="button" onClick={() => setShowAddPanel((value) => !value)}>
+          <button type="button" className="button" onClick={() => setShowAddPanel((value) => !value)} aria-expanded={showAddPanel} aria-controls="watchlist-add-panel">
             {showAddPanel ? "Cancel" : "Add alert"}
           </button>
         </div>
 
         {showAddPanel ? (
-          <div className="content-card" style={{ marginBottom: "1.5rem", padding: "1.25rem 1.5rem" }}>
+          <div id="watchlist-add-panel" className="content-card" style={{ marginBottom: "1.5rem", padding: "1.25rem 1.5rem" }}>
             <h3 style={{ fontWeight: 700, marginBottom: "1rem", color: "var(--navy)" }}>Add a law to your watchlist</h3>
-            <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+            <fieldset style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem", border: 0, padding: 0 }}>
+              <legend style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--navy)", marginBottom: "0.45rem" }}>Watchlist type</legend>
               <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", cursor: "pointer" }}>
                 <input type="radio" name="addType" value="jurisdiction" checked={addType === "jurisdiction"} onChange={() => setAddType("jurisdiction")} />
                 By jurisdiction
@@ -169,10 +261,13 @@ export default function AlertsPage() {
                 <input type="radio" name="addType" value="law" checked={addType === "law"} onChange={() => setAddType("law")} />
                 By specific law
               </label>
-            </div>
+            </fieldset>
 
             {addType === "jurisdiction" ? (
-              <select
+              <>
+                <label htmlFor="watchlist-jurisdiction" style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, color: "var(--navy)", marginBottom: "0.35rem" }}>Jurisdiction</label>
+                <select
+                id="watchlist-jurisdiction"
                 value={addJx}
                 onChange={(event) => setAddJx(event.target.value)}
                 style={{ padding: "0.5rem 0.75rem", borderRadius: "10px", border: "1px solid var(--border)", fontSize: "0.95rem", minWidth: "220px" }}
@@ -184,8 +279,12 @@ export default function AlertsPage() {
                   </option>
                 ))}
               </select>
+              </>
             ) : (
-              <select
+              <>
+                <label htmlFor="watchlist-law" style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, color: "var(--navy)", marginBottom: "0.35rem" }}>Law</label>
+                <select
+                id="watchlist-law"
                 value={addSlug}
                 onChange={(event) => setAddSlug(event.target.value)}
                 style={{ padding: "0.5rem 0.75rem", borderRadius: "10px", border: "1px solid var(--border)", fontSize: "0.95rem", minWidth: "280px" }}
@@ -197,10 +296,11 @@ export default function AlertsPage() {
                   </option>
                 ))}
               </select>
+              </>
             )}
 
             <div style={{ marginTop: "1rem", display: "flex", gap: "0.75rem" }}>
-              <button className="button button--primary" onClick={addPref} disabled={saving || (addType === "law" ? !addSlug : !addJx)}>
+              <button type="button" className="button button--primary" onClick={addPref} disabled={saving || (addType === "law" ? !addSlug : !addJx)}>
                 {saving ? "Saving..." : "Save watchlist"}
               </button>
             </div>
@@ -225,11 +325,107 @@ export default function AlertsPage() {
 
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 320px", gap: "2rem", alignItems: "start" }}>
           <div>
+            <div className="content-card" style={{ marginBottom: "1.25rem", padding: "1rem 1.25rem", background: "rgba(230,57,70,0.04)", borderColor: "rgba(230,57,70,0.16)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", alignItems: "center", marginBottom: "0.85rem" }}>
+                <div>
+                  <h3 style={{ margin: 0, fontWeight: 700, color: "var(--navy)", fontSize: "1rem" }}>Continuous compliance alerts</h3>
+                  <p style={{ margin: "0.3rem 0 0", color: "var(--muted)", fontSize: "0.88rem" }}>
+                    Persistent alerts generated from assessment age, law drift, execution gaps, and evidence freshness.
+                  </p>
+                </div>
+                <button type="button" className="button" onClick={refreshComplianceAlerts} disabled={refreshingCompliance}>
+                  {refreshingCompliance ? "Refreshing..." : "Refresh workspace alerts"}
+                </button>
+              </div>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: filteredComplianceAlerts.length > 0 ? "0.9rem" : 0 }}>
+                {(["all", "open", "acknowledged"] as const).map((status) => (
+                  <button
+                    type="button"
+                    key={status}
+                    onClick={() => setAlertFilter(status)}
+                    aria-pressed={alertFilter === status}
+                    style={{
+                      padding: "0.35rem 0.85rem",
+                      fontSize: "0.8rem",
+                      borderRadius: "999px",
+                      border: "1px solid var(--border)",
+                      background: alertFilter === status ? "var(--navy)" : "transparent",
+                      color: alertFilter === status ? "#fff" : "var(--text)",
+                      cursor: "pointer",
+                      fontWeight: alertFilter === status ? 700 : 400,
+                    }}
+                  >
+                    {status === "all" ? "All workspace alerts" : status === "open" ? "Open" : "Acknowledged"}
+                  </button>
+                ))}
+              </div>
+              {filteredComplianceAlerts.length === 0 ? (
+                <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.88rem" }}>
+                  No persistent compliance alerts match this filter.
+                </p>
+              ) : (
+                <div style={{ display: "grid", gap: "0.8rem" }}>
+                  {filteredComplianceAlerts.map((alert) => (
+                    <div
+                      key={alert.id}
+                      style={{
+                        padding: "0.95rem 1rem",
+                        borderRadius: "14px",
+                        background: "rgba(255,255,255,0.82)",
+                        border: "1px solid rgba(16,32,48,0.08)",
+                        borderLeft: `4px solid ${alert.severity === "high" ? "var(--red)" : alert.severity === "medium" ? "#915a1e" : "var(--navy)"}`,
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.75rem", flexWrap: "wrap", marginBottom: "0.35rem" }}>
+                        <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap", alignItems: "center" }}>
+                          <strong style={{ color: "var(--navy)" }}>{alert.title}</strong>
+                          <span style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", color: alert.severity === "high" ? "var(--red)" : alert.severity === "medium" ? "#915a1e" : "var(--navy)" }}>
+                            {alert.severity}
+                          </span>
+                          <span style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", color: alert.status === "acknowledged" ? "#915a1e" : "var(--red)" }}>
+                            {alert.status}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>
+                          {new Date(alert.updatedAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                        </span>
+                      </div>
+                      <p style={{ margin: "0 0 0.45rem", color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.55 }}>
+                        {alert.message}
+                      </p>
+                      {alert.assessment ? (
+                        <p style={{ margin: "0 0 0.7rem", color: "var(--navy)", fontSize: "0.82rem" }}>
+                          {alert.assessment.name ?? `Assessment from ${new Date(alert.assessment.createdAt).toLocaleDateString("en-GB")}`}
+                        </p>
+                      ) : null}
+                      <div style={{ display: "flex", gap: "0.55rem", flexWrap: "wrap" }}>
+                        {alert.assessmentId ? (
+                          <Link href={`/assess/results/${alert.assessmentId}`} className="button" style={{ fontSize: "0.8rem" }}>
+                            Open assessment
+                          </Link>
+                        ) : null}
+                        {alert.status === "open" ? (
+                          <button type="button" className="button" onClick={() => updateComplianceAlert(alert.id, "acknowledged")} disabled={updatingAlertId === alert.id}>
+                            {updatingAlertId === alert.id ? "Updating..." : "Acknowledge"}
+                          </button>
+                        ) : null}
+                        <button type="button" className="button" onClick={() => updateComplianceAlert(alert.id, "resolved")} disabled={updatingAlertId === alert.id}>
+                          {updatingAlertId === alert.id ? "Updating..." : "Resolve"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "1.25rem" }}>
               {["all", "amendment", "new_obligation", "effective_date_change", "status_change", "guidance_issued"].map((type) => (
                 <button
+                  type="button"
                   key={type}
                   onClick={() => setFilterType(type)}
+                  aria-pressed={filterType === type}
                   style={{
                     padding: "0.35rem 0.85rem",
                     fontSize: "0.8rem",
@@ -336,9 +532,11 @@ export default function AlertsPage() {
                           {pref.lawSlug ? laws.find((law) => law.slug === pref.lawSlug)?.short_title ?? pref.lawSlug : pref.jurisdiction}
                         </span>
                         <button
+                          type="button"
                           onClick={() => removePref(pref.id)}
                           style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", fontSize: "0.9rem", lineHeight: 1 }}
                           title="Remove alert"
+                          aria-label={`Remove alert for ${pref.lawSlug ? laws.find((law) => law.slug === pref.lawSlug)?.short_title ?? pref.lawSlug : pref.jurisdiction ?? "watchlist entry"}`}
                         >
                           Remove
                         </button>
@@ -346,6 +544,28 @@ export default function AlertsPage() {
                       <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.5 }}>
                         This filter narrows the in-app change feed and reassessment prompts for your account.
                       </p>
+                      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.7rem", alignItems: "center" }}>
+                        <label style={{ display: "flex", gap: "0.35rem", alignItems: "center", fontSize: "0.8rem", color: "var(--muted)" }}>
+                          <input
+                            type="checkbox"
+                            checked={pref.emailEnabled ?? true}
+                            disabled={updatingPrefId === pref.id}
+                            onChange={(event) => void updatePref(pref.id, { emailEnabled: event.target.checked })}
+                          />
+                          Email enabled
+                        </label>
+                        <select
+                          aria-label="Alert delivery cadence"
+                          value={pref.digestMode ?? "immediate"}
+                          disabled={updatingPrefId === pref.id}
+                          onChange={(event) => void updatePref(pref.id, { digestMode: event.target.value })}
+                          style={{ padding: "0.35rem 0.55rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.78rem" }}
+                        >
+                          <option value="immediate">Immediate</option>
+                          <option value="daily">Daily</option>
+                          <option value="weekly">Weekly</option>
+                        </select>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -366,6 +586,44 @@ export default function AlertsPage() {
                       <p style={{ margin: "0.35rem 0 0", fontSize: "0.82rem", color: "var(--muted)" }}>
                         {organization.members.length} member{organization.members.length === 1 ? "" : "s"} · {organization.invites.length} pending invite{organization.invites.length === 1 ? "" : "s"}
                       </p>
+                      <div style={{ display: "grid", gap: "0.55rem", marginTop: "0.7rem" }}>
+                        <label style={{ display: "flex", gap: "0.35rem", alignItems: "center", fontSize: "0.8rem", color: "var(--muted)" }}>
+                          <input
+                            type="checkbox"
+                            checked={orgRoutingDrafts[organization.id]?.complianceEmailEnabled ?? organization.integrationSettings?.complianceEmailEnabled ?? true}
+                            disabled={updatingOrgId === organization.id}
+                            onChange={(event) => setOrgDraft(organization.id, { complianceEmailEnabled: event.target.checked })}
+                          />
+                          Route compliance alert emails to workspace
+                        </label>
+                        <label htmlFor={`workspace-routing-role-${organization.id}`} style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
+                          Notify this workspace role
+                        </label>
+                        <select
+                          id={`workspace-routing-role-${organization.id}`}
+                          value={orgRoutingDrafts[organization.id]?.notificationRole ?? organization.integrationSettings?.notificationRole ?? "owner"}
+                          disabled={updatingOrgId === organization.id}
+                          onChange={(event) => setOrgDraft(organization.id, { notificationRole: event.target.value })}
+                          style={{ padding: "0.35rem 0.55rem", borderRadius: "8px", border: "1px solid var(--border)", fontSize: "0.78rem" }}
+                        >
+                          <option value="owner">Owners only</option>
+                          <option value="admin">Admins and owners</option>
+                          <option value="member">All members</option>
+                        </select>
+                        <label htmlFor={`workspace-routing-slack-${organization.id}`} style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
+                          Slack webhook URL
+                        </label>
+                        <input
+                          id={`workspace-routing-slack-${organization.id}`}
+                          value={orgRoutingDrafts[organization.id]?.complianceSlackWebhookUrl ?? organization.integrationSettings?.complianceSlackWebhookUrl ?? ""}
+                          disabled={updatingOrgId === organization.id}
+                          onChange={(event) => setOrgDraft(organization.id, { complianceSlackWebhookUrl: event.target.value })}
+                          placeholder="Workspace Slack webhook URL"
+                        />
+                        <button type="button" className="button" onClick={() => updateOrganizationRouting(organization)} disabled={updatingOrgId === organization.id}>
+                          {updatingOrgId === organization.id ? "Saving..." : "Save workspace routing"}
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

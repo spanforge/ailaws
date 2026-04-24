@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { laws } from "@/lib/lexforge-data";
+import { buildAssessmentAssumptions, buildComplianceAnalysis } from "@/lib/compliance-analysis";
 import { runRulesEngine, type AssessmentInput, type AssessmentResult } from "@/lib/rules-engine";
 import {
   buildActionPlan,
@@ -61,6 +62,8 @@ export default async function PrintPage({ params, searchParams }: PrintPageProps
   const preset = getProductPresetById(input.product_preset);
   const verdict = buildExecutiveVerdict(results, input);
   const controls = buildRecommendedControls(results);
+  const analysis = buildComplianceAnalysis(input, results, []);
+  const assumptions = buildAssessmentAssumptions(input, analysis.normalizedInput);
   const trust = buildTrustScorecard(enriched, []);
   const gapReport = buildClauseGapReport(results, []);
   const createdAt = new Date(assessment.createdAt).toLocaleDateString("en-GB", {
@@ -216,6 +219,10 @@ export default async function PrintPage({ params, searchParams }: PrintPageProps
               <ul>
                 {penalties.map((p) => <li key={p.lawSlug}><strong>{p.lawShortTitle}:</strong> {p.summary}</li>)}
               </ul>
+              <h3 style={{ marginTop: "1rem" }}>Assessment assumptions</h3>
+              <ul>
+                {assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}
+              </ul>
               <p style={{ fontSize: "9pt", marginTop: "0.75rem" }}>This memo is informational only and does not constitute legal advice. Review with qualified counsel before relying on for compliance decisions.</p>
             </section>
           </>
@@ -353,6 +360,12 @@ export default async function PrintPage({ params, searchParams }: PrintPageProps
                     ))}
                   </ul>
                 </div>
+              </div>
+              <div className="panel" style={{ marginTop: "0.9rem" }}>
+                <h3>Assessment assumptions</h3>
+                <ul>
+                  {assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}
+                </ul>
               </div>
             </section>
 

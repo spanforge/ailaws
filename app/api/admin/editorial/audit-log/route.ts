@@ -25,11 +25,15 @@ export async function GET(req: NextRequest) {
   const entityType = searchParams.get("entityType");
   const actorId = searchParams.get("actorId");
   const format = searchParams.get("format");
+  const eventType = searchParams.get("eventType");
 
   const where: Record<string, unknown> = {};
   if (entityId) where.entityId = entityId;
   if (entityType) where.entityType = entityType;
   if (actorId) where.actorId = actorId;
+  if (eventType === "revert") {
+    where.changeReason = { contains: "Reverted", mode: "insensitive" };
+  }
 
   const [entries, total] = await Promise.all([
     prisma.contentEditAuditLog.findMany({
@@ -46,11 +50,12 @@ export async function GET(req: NextRequest) {
 
   if (format === "csv") {
     const rows = [
-      ["createdAt", "entityType", "entityId", "fieldName", "oldValue", "newValue", "changeReason", "actorName", "actorEmail"],
+      ["createdAt", "entityType", "entityId", "eventType", "fieldName", "oldValue", "newValue", "changeReason", "actorName", "actorEmail"],
       ...entries.map((entry) => [
         entry.createdAt.toISOString(),
         entry.entityType,
         entry.entityId,
+        entry.changeReason?.toLowerCase().includes("reverted") ? "revert" : "edit",
         entry.fieldName,
         entry.oldValue ?? "",
         entry.newValue ?? "",
@@ -74,7 +79,10 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({
-    data: entries,
+    data: entries.map((entry) => ({
+      ...entry,
+      eventType: entry.changeReason?.toLowerCase().includes("reverted") ? "revert" : "edit",
+    })),
     total,
     page,
     totalPages: Math.ceil(total / limit),

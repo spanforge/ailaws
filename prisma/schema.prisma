@@ -26,12 +26,15 @@ model User {
   alertPreferences AlertPreference[]
   orgMemberships   OrganizationMember[]
   assignedItems    ChecklistItem[]     @relation("Assignee")
+  evidenceArtifacts EvidenceArtifact[] @relation("EvidenceActor")
+  complianceAlerts ComplianceAlert[]
 
   // WS1: Provenance — laws this user verified
   verifiedLaws     Law[]               @relation("LawVerifier")
 
   // WS2: Editorial Workflow
   auditLogEntries  ContentEditAuditLog[] @relation("AuditLogActor")
+  actionAuditLogs  ActionAuditLog[]      @relation("ActionAuditActor")
   reviewRequests   ContentApproval[]     @relation("ContentReviewer")
   approvalDecisions ContentApproval[]   @relation("ContentApprover")
 
@@ -148,9 +151,31 @@ model Assessment {
 
   results    AssessmentResult[]
   checklists Checklist[]
+  evidenceArtifacts EvidenceArtifact[]
+  complianceAlerts  ComplianceAlert[]
 
   @@index([userId])
   @@map("assessments")
+}
+
+model SystemChangeEvent {
+  id           String   @id @default(cuid())
+  source       String
+  eventType    String
+  environment  String?
+  title        String
+  summary      String
+  ref          String?
+  commitSha    String?
+  actor        String?
+  fingerprint  String   @unique
+  metadataJson String?
+  occurredAt   DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([occurredAt])
+  @@index([source, eventType])
+  @@map("system_change_events")
 }
 
 model AssessmentResult {
@@ -205,7 +230,36 @@ model ChecklistItem {
   updatedAt    DateTime    @updatedAt
   createdAt    DateTime    @default(now())
 
+  evidenceArtifacts EvidenceArtifact[]
+
   @@map("checklist_items")
+}
+
+model EvidenceArtifact {
+  id              String        @id @default(cuid())
+  checklistItemId String
+  checklistItem   ChecklistItem @relation(fields: [checklistItemId], references: [id])
+  assessmentId    String?
+  assessment      Assessment?   @relation(fields: [assessmentId], references: [id])
+  createdByUserId String?
+  createdBy       User?         @relation("EvidenceActor", fields: [createdByUserId], references: [id])
+  title           String
+  description     String?
+  artifactType    String
+  sourceType      String?       // manual_note | document | log | url | screenshot | export | policy
+  sourceUrl       String?
+  status          String        @default("collected") // collected | linked | verified | stale | rejected
+  metadataJson    String?
+  collectedAt     DateTime      @default(now())
+  verifiedAt      DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([checklistItemId])
+  @@index([assessmentId])
+  @@index([status])
+  @@map("evidence_artifacts")
 }
 
 model SavedLaw {
@@ -278,6 +332,29 @@ model ContentApproval {
   @@map("content_approvals")
 }
 
+model ActionAuditLog {
+  id             String        @id @default(cuid())
+  actorId        String?
+  actor          User?         @relation("ActionAuditActor", fields: [actorId], references: [id])
+  actorEmail     String?
+  actionType     String
+  scope          String        // admin | organization | alerts | auth
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  targetType     String?
+  targetId       String?
+  status         String        @default("success") // success | denied | failed
+  requestId      String?
+  metadataJson   String?
+  createdAt      DateTime      @default(now())
+
+  @@index([actorId])
+  @@index([organizationId])
+  @@index([scope, createdAt])
+  @@index([actionType, createdAt])
+  @@map("action_audit_logs")
+}
+
 // WS8: Source Health Checks
 model SourceHealthCheck {
   id              String   @id @default(cuid())
@@ -308,6 +385,30 @@ model AlertPreference {
   @@map("alert_preferences")
 }
 
+model ComplianceAlert {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  assessmentId String?
+  assessment   Assessment? @relation(fields: [assessmentId], references: [id])
+  alertType    String
+  severity     String
+  title        String
+  message      String
+  status       String     @default("open") // open | acknowledged | resolved
+  fingerprint  String     @unique
+  metadataJson String?
+  lastDeliveredAt DateTime?
+  deliveryError String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  resolvedAt   DateTime?
+
+  @@index([userId, status])
+  @@index([assessmentId])
+  @@map("compliance_alerts")
+}
+
 model Organization {
   id        String   @id @default(cuid())
   name      String
@@ -316,6 +417,8 @@ model Organization {
 
   members OrganizationMember[]
   invites OrganizationInvite[]
+  integrationSettings OrganizationIntegrationSettings?
+  actionAuditLogs ActionAuditLog[]
 
   @@map("organizations")
 }
@@ -344,4 +447,17 @@ model OrganizationInvite {
   createdAt      DateTime     @default(now())
 
   @@map("organization_invites")
+}
+
+model OrganizationIntegrationSettings {
+  id                        String       @id @default(cuid())
+  organizationId            String       @unique
+  organization              Organization @relation(fields: [organizationId], references: [id])
+  complianceEmailEnabled    Boolean      @default(true)
+  complianceSlackWebhookUrl String?
+  notificationRole          String       @default("owner")
+  createdAt                 DateTime     @default(now())
+  updatedAt                 DateTime     @updatedAt
+
+  @@map("organization_integration_settings")
 }

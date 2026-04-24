@@ -214,6 +214,7 @@ export default function AdminChangelogPage() {
                 <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem", fontSize: "0.85rem", fontWeight: 600 }}>
                   Law *
                   <select
+                    id="changelog-law"
                     required
                     value={form.lawSlug}
                     onChange={(e) => setForm((f) => ({ ...f, lawSlug: e.target.value }))}
@@ -229,6 +230,7 @@ export default function AdminChangelogPage() {
                 <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem", fontSize: "0.85rem", fontWeight: 600 }}>
                   Change type *
                   <select
+                    id="changelog-change-type"
                     required
                     value={form.changeType}
                     onChange={(e) => setForm((f) => ({ ...f, changeType: e.target.value }))}
@@ -243,6 +245,7 @@ export default function AdminChangelogPage() {
                 <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem", fontSize: "0.85rem", fontWeight: 600 }}>
                   Date of change *
                   <input
+                    id="changelog-changed-at"
                     type="date"
                     required
                     value={form.changedAt}
@@ -254,6 +257,7 @@ export default function AdminChangelogPage() {
                 <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem", fontSize: "0.85rem", fontWeight: 600 }}>
                   Summary * <span style={{ fontWeight: 400, color: "var(--muted)" }}>(shown in alert feed)</span>
                   <input
+                    id="changelog-summary"
                     type="text"
                     required
                     placeholder="e.g. GPAI obligations now in effect"
@@ -266,6 +270,7 @@ export default function AdminChangelogPage() {
                 <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem", fontSize: "0.85rem", fontWeight: 600 }}>
                   Details <span style={{ fontWeight: 400, color: "var(--muted)" }}>(optional, shown expanded)</span>
                   <textarea
+                    id="changelog-details"
                     rows={4}
                     placeholder="Longer explanation of what changed and what it means for companies…"
                     value={form.details}
@@ -275,12 +280,12 @@ export default function AdminChangelogPage() {
                 </label>
 
                 {error && (
-                  <p style={{ color: "var(--red)", fontSize: "0.85rem", background: "#fde8ea", padding: "0.5rem 0.75rem", borderRadius: "6px" }}>
+                  <p role="alert" aria-live="assertive" style={{ color: "var(--red)", fontSize: "0.85rem", background: "#fde8ea", padding: "0.5rem 0.75rem", borderRadius: "6px" }}>
                     {error}
                   </p>
                 )}
                 {success && (
-                  <p style={{ color: "var(--green)", fontSize: "0.85rem", background: "#e8f5ef", padding: "0.5rem 0.75rem", borderRadius: "6px" }}>
+                  <p role="status" aria-live="polite" style={{ color: "var(--green)", fontSize: "0.85rem", background: "#e8f5ef", padding: "0.5rem 0.75rem", borderRadius: "6px" }}>
                     {success}
                   </p>
                 )}

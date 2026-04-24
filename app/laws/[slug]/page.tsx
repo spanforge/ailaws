@@ -134,6 +134,11 @@ export default async function LawDetailPage({ params }: Props) {
                       Source: {law.source_citation_full}
                     </p>
                   )}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.65rem", marginTop: "0.8rem" }}>
+                    {law.source_authority ? <EvidenceLikeField label="Source authority" value={law.source_authority} /> : null}
+                    {law.source_jurisdiction ? <EvidenceLikeField label="Source jurisdiction" value={law.source_jurisdiction} /> : null}
+                    {law.review_status ? <EvidenceLikeField label="Review status" value={law.review_status.replace(/_/g, " ")} /> : null}
+                  </div>
                   {(law.source_kind === "editorial_summary" || law.confidence_level === "low" || law.review_status === "draft") && (
                     <p style={{ margin: "0.65rem 0 0", padding: "0.5rem 0.75rem", background: "var(--amber-light)", borderLeft: "3px solid var(--amber)", borderRadius: "4px", fontSize: "0.86rem", color: "#7c4a00", lineHeight: 1.5 }}>
                       <strong>Editorial notice:</strong> This entry is based on an editorial summary or is pending verification against the primary source. Verify the official text before relying on this for compliance decisions.
@@ -173,6 +178,10 @@ export default async function LawDetailPage({ params }: Props) {
                 <Fact label="Issuing Body" value={law.issuing_body} />
                 <Fact label="Type" value={CONTENT_TYPE_LABEL[law.content_type] ?? law.content_type} />
                 <Fact label="Status" value={STATUS_LABEL[law.status] ?? law.status} />
+                {law.source_kind && <Fact label="Source type" value={SOURCE_KIND_LABEL[law.source_kind] ?? law.source_kind} />}
+                {law.source_authority && <Fact label="Authority" value={law.source_authority} />}
+                {law.confidence_level && <Fact label="Confidence" value={law.confidence_level} />}
+                {law.review_status && <Fact label="Review" value={law.review_status.replace(/_/g, " ")} />}
                 {law.adopted_date && <Fact label="Adopted" value={law.adopted_date} />}
                 {law.effective_date && <Fact label="Effective" value={law.effective_date} />}
                 <Fact label="Last reviewed" value={lastReviewed} />
@@ -250,6 +259,25 @@ function ObligationCard({ obligation }: { obligation: Obligation }) {
           Citation: <em>{obligation.citation}</em>
         </p>
       )}
+      {(obligation.source_excerpt || obligation.source_citation_full || obligation.review_status) ? (
+        <div style={{ marginTop: "0.75rem", padding: "0.7rem 0.85rem", borderRadius: "12px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+          <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap", marginBottom: "0.35rem" }}>
+            {obligation.source_kind ? <ProvenanceBadge kind={obligation.source_kind} /> : null}
+            {obligation.confidence_level ? <ConfidenceBadge level={obligation.confidence_level as "high" | "medium" | "low"} /> : null}
+            {obligation.review_status && obligation.review_status !== "verified" ? <ReviewStatusBadge status={obligation.review_status} /> : null}
+          </div>
+          {obligation.source_citation_full ? (
+            <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.8rem" }}>
+              Full citation: {obligation.source_citation_full}
+            </p>
+          ) : null}
+          {obligation.source_excerpt ? (
+            <p style={{ margin: "0.35rem 0 0", color: "var(--navy)", fontSize: "0.84rem", lineHeight: 1.55 }}>
+              Source note: {obligation.source_excerpt}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -259,6 +287,17 @@ function Fact({ label, value }: { label: string; value: string }) {
     <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.5rem" }}>
       <dt style={{ color: "var(--muted)", fontSize: "0.85rem", fontWeight: 700, whiteSpace: "nowrap" }}>{label}</dt>
       <dd style={{ margin: 0, fontSize: "0.9rem", color: "var(--navy)", fontWeight: 500 }}>{value}</dd>
+    </div>
+  );
+}
+
+function EvidenceLikeField({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ padding: "0.6rem 0.8rem", borderRadius: "10px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+      <p style={{ margin: "0 0 0.15rem", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)" }}>
+        {label}
+      </p>
+      <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.85rem", fontWeight: 600 }}>{value}</p>
     </div>
   );
 }

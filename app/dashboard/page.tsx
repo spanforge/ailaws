@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { getLawBySlug, laws } from "@/lib/lexforge-data";
+import { getEffectiveEvidenceStatus, summarizeEvidenceCoverage } from "@/lib/evidence-artifacts";
 import { TEMPLATE_LIBRARY, buildActionPlan, enrichAssessmentResults, getFreshnessLabel, getLawLastReviewed } from "@/lib/smb";
 import { buildClauseGapReport, buildDriftTriggers, buildTrustScorecard, type WorkspaceChecklistItem } from "@/lib/workspace-intelligence";
 import type { AssessmentInput, AssessmentResult } from "@/lib/rules-engine";
@@ -30,6 +31,13 @@ type ChecklistItem = {
   title?: string;
   category?: string | null;
   priority?: string | null;
+  evidenceArtifacts?: Array<{
+    id: string;
+    status: string;
+    expiresAt?: string | null;
+    verifiedAt?: string | null;
+    collectedAt?: string;
+  }>;
   status: "not_started" | "in_progress" | "completed";
 };
 
@@ -48,6 +56,21 @@ type ChangeEntry = {
   changeType: string;
   summary: string;
   changedAt: string;
+};
+
+type ComplianceAlert = {
+  id: string;
+  assessmentId: string | null;
+  alertType: string;
+  severity: "high" | "medium" | "low";
+  title: string;
+  message: string;
+  status: "open" | "acknowledged" | "resolved";
+  assessment?: {
+    id: string;
+    name: string | null;
+    createdAt: string;
+  } | null;
 };
 
 type Organization = {
@@ -140,6 +163,7 @@ export default function DashboardPage() {
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [savedSlugs, setSavedSlugs] = useState<SavedEntry[]>([]);
   const [alerts, setAlerts] = useState<ChangeEntry[]>([]);
+  const [complianceAlerts, setComplianceAlerts] = useState<ComplianceAlert[]>([]);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [incomingInvites, setIncomingInvites] = useState<IncomingInvite[]>([]);
   const [orgName, setOrgName] = useState("");
@@ -171,6 +195,7 @@ export default function DashboardPage() {
       setAssessments(assessmentResponse.data ?? []);
       setSavedSlugs(savedResponse.data ?? []);
       setAlerts(alertsResponse.data ?? []);
+      setComplianceAlerts(alertsResponse.complianceAlerts ?? []);
       setOrganizations(organizationsResponse.data ?? []);
       setIncomingInvites(incomingInvitesResponse.data ?? []);
       setLoading(false);
@@ -182,6 +207,9 @@ export default function DashboardPage() {
   const latestResults = latestAssessment ? mapStoredResults(latestAssessment) : [];
   const latestActions = latestAssessment ? buildActionPlan(latestResults).topUrgentActions : [];
   const latestChecklistItems = mapChecklistItems(latestChecklist);
+  const latestEvidenceArtifacts = latestChecklist?.items.flatMap((item) => item.evidenceArtifacts ?? []) ?? [];
+  const latestEvidenceCoverage = summarizeEvidenceCoverage(latestEvidenceArtifacts);
+  const staleEvidenceCount = latestEvidenceArtifacts.filter((artifact) => getEffectiveEvidenceStatus(artifact) === "stale").length;
   const checklistCompleted = latestChecklist?.items.filter((item) => item.status === "completed").length ?? 0;
   const checklistPercent = latestChecklist?.items.length ? Math.round((checklistCompleted / latestChecklist.items.length) * 100) : 0;
   const savedLaws = savedSlugs.map((entry) => ({ ...entry, law: getLawBySlug(entry.lawSlug) })).filter((entry) => entry.law != null);
@@ -196,6 +224,13 @@ export default function DashboardPage() {
       createdAt: latestAssessment.createdAt,
       results: enriched,
       checklistItems: latestChecklistItems,
+      evidenceArtifacts: (latestChecklist?.items ?? []).flatMap((item) =>
+        (item.evidenceArtifacts ?? []).map((artifact) => ({
+          ...artifact,
+          checklistItemTitle: item.title ?? "Checklist item",
+          priority: item.priority ?? null,
+        })),
+      ),
       changelogEntries: alerts.map((entry) => ({
         lawSlug: entry.lawSlug,
         changedAt: entry.changedAt,
@@ -248,6 +283,7 @@ export default function DashboardPage() {
   }, [alerts, savedLaws]);
 
   const showGettingStarted = assessments.length === 0 && savedSlugs.length === 0 && organizations.length === 0;
+  const activeComplianceAlerts = complianceAlerts.filter((alert) => alert.status !== "resolved").slice(0, 4);
 
   async function createOrganization() {
     if (!orgName.trim() || !orgSlug.trim()) return;
@@ -493,6 +529,21 @@ export default function DashboardPage() {
               </div>
               <div className="content-card" style={{ padding: "1rem 1.1rem" }}>
                 <p style={{ margin: "0 0 0.25rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+                  Evidence readiness
+                </p>
+                <h3 style={{ margin: 0, color: "var(--navy)", fontFamily: "var(--font-heading)" }}>
+                  {latestEvidenceCoverage.verified}/{latestEvidenceCoverage.total} verified
+                </h3>
+                <p style={{ margin: "0.35rem 0 0", color: "var(--muted)", fontSize: "0.9rem" }}>
+                  {staleEvidenceCount > 0
+                    ? `${staleEvidenceCount} evidence artifact${staleEvidenceCount === 1 ? "" : "s"} are stale and need refresh.`
+                    : latestEvidenceCoverage.total > 0
+                      ? `${latestEvidenceCoverage.active} linked artifact${latestEvidenceCoverage.active === 1 ? "" : "s"} supporting your current checklist.`
+                      : "No evidence artifacts linked yet."}
+                </p>
+              </div>
+              <div className="content-card" style={{ padding: "1rem 1.1rem" }}>
+                <p style={{ margin: "0 0 0.25rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
                   Resume
                 </p>
                 <h3 style={{ margin: 0, color: "var(--navy)", fontFamily: "var(--font-heading)" }}>
@@ -569,6 +620,60 @@ export default function DashboardPage() {
           </section>
         ) : null}
 
+        {activeComplianceAlerts.length > 0 ? (
+          <section style={{ marginBottom: "2rem" }}>
+            <div
+              style={{
+                padding: "1rem 1.15rem",
+                borderRadius: "var(--radius)",
+                background: "rgba(230,57,70,0.06)",
+                border: "1px solid rgba(230,57,70,0.18)",
+                marginBottom: "0.85rem",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "1rem",
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <span style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--red)" }}>Workspace alerts</span>
+                <h2 style={{ margin: "0.2rem 0 0.25rem", color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.3rem", lineHeight: 1.15 }}>
+                  {activeComplianceAlerts.length} persistent compliance alert{activeComplianceAlerts.length === 1 ? "" : "s"} need attention
+                </h2>
+                <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>
+                  Drift is now persisted across assessment age, law updates, execution gaps, and evidence freshness.
+                </p>
+              </div>
+              <Link href="/alerts" className="button button--primary" style={{ whiteSpace: "nowrap" }}>
+                Open alert queue
+              </Link>
+            </div>
+            <div className="stack">
+              {activeComplianceAlerts.map((alert) => (
+                <div key={alert.id} className="content-card" style={{ padding: "1rem 1.1rem", borderLeft: `4px solid ${alert.severity === "high" ? "var(--red)" : alert.severity === "medium" ? "#915a1e" : "var(--navy)"}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+                    <div>
+                      <p style={{ margin: 0, fontWeight: 700, color: "var(--navy)", fontSize: "0.95rem" }}>{alert.title}</p>
+                      <p style={{ margin: "0.25rem 0 0", color: "var(--muted)", fontSize: "0.86rem" }}>{alert.message}</p>
+                      {alert.assessment ? (
+                        <p style={{ margin: "0.35rem 0 0", color: "var(--muted)", fontSize: "0.8rem" }}>
+                          {alert.assessment.name ?? `Assessment ${formatShortDate(alert.assessment.createdAt)}`}
+                        </p>
+                      ) : null}
+                    </div>
+                    {alert.assessmentId ? (
+                      <Link href={`/assess/results/${alert.assessmentId}`} className="button" style={{ whiteSpace: "nowrap" }}>
+                        View assessment
+                      </Link>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "1.25rem" }}>
           <section>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
@@ -592,6 +697,9 @@ export default function DashboardPage() {
                   const checklist = assessment.checklists?.[0];
                   const completed = checklist?.items.filter((item) => item.status === "completed").length ?? 0;
                   const total = checklist?.items.length ?? 0;
+                  const evidenceArtifacts = checklist?.items.flatMap((item) => item.evidenceArtifacts ?? []) ?? [];
+                  const evidenceCoverage = summarizeEvidenceCoverage(evidenceArtifacts);
+                  const staleEvidence = evidenceArtifacts.filter((artifact) => getEffectiveEvidenceStatus(artifact) === "stale").length;
 
                   return (
                     <div key={assessment.id} className="content-card" style={{ padding: "1rem 1.1rem" }}>
@@ -615,6 +723,11 @@ export default function DashboardPage() {
                             {checklist ? (
                               <span style={{ fontSize: "0.75rem", padding: "0.15rem 0.5rem", borderRadius: "999px", background: "rgba(16,32,48,0.07)", color: "var(--navy)", fontWeight: 700 }}>
                                 Checklist {completed}/{total}
+                              </span>
+                            ) : null}
+                            {evidenceCoverage.total > 0 ? (
+                              <span style={{ fontSize: "0.75rem", padding: "0.15rem 0.5rem", borderRadius: "999px", background: staleEvidence > 0 ? "rgba(230,57,70,0.1)" : "rgba(42,123,98,0.12)", color: staleEvidence > 0 ? "var(--red)" : "var(--green)", fontWeight: 700 }}>
+                                Evidence {evidenceCoverage.verified}/{evidenceCoverage.total}
                               </span>
                             ) : null}
                           </div>
@@ -683,9 +796,15 @@ export default function DashboardPage() {
                 <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem", lineHeight: 1.55 }}>
                   No team workspace yet. Create one to invite teammates and centralize alerts and evidence review.
                 </p>
-                <input value={orgName} onChange={(event) => setOrgName(event.target.value)} placeholder="Team name" />
-                <input value={orgSlug} onChange={(event) => setOrgSlug(event.target.value)} placeholder="team-slug" />
-                <button className="button button--primary" onClick={createOrganization} disabled={creatingOrg}>
+                <div style={{ display: "grid", gap: "0.35rem" }}>
+                  <label htmlFor="workspace-name" style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--navy)" }}>Workspace name</label>
+                  <input id="workspace-name" value={orgName} onChange={(event) => setOrgName(event.target.value)} placeholder="Team name" autoComplete="organization" />
+                </div>
+                <div style={{ display: "grid", gap: "0.35rem" }}>
+                  <label htmlFor="workspace-slug" style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--navy)" }}>Workspace slug</label>
+                  <input id="workspace-slug" value={orgSlug} onChange={(event) => setOrgSlug(event.target.value)} placeholder="team-slug" autoCapitalize="off" autoCorrect="off" />
+                </div>
+                <button type="button" className="button button--primary" onClick={createOrganization} disabled={creatingOrg}>
                   {creatingOrg ? "Creating..." : "Create workspace"}
                 </button>
               </div>
@@ -701,13 +820,19 @@ export default function DashboardPage() {
                         </p>
                       </div>
                       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                        <label htmlFor={`invite-email-${organization.id}`} style={{ position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0, 0, 0, 0)", whiteSpace: "nowrap", border: 0 }}>
+                          Invite teammate by email for {organization.name}
+                        </label>
                         <input
+                          id={`invite-email-${organization.id}`}
+                          type="email"
                           value={inviteEmails[organization.id] ?? ""}
                           onChange={(event) => setInviteEmails((current) => ({ ...current, [organization.id]: event.target.value }))}
                           placeholder="teammate@company.com"
+                          autoComplete="email"
                           style={{ minWidth: "220px" }}
                         />
-                        <button className="button" onClick={() => inviteToOrganization(organization.id)} disabled={invitingOrgId === organization.id}>
+                        <button type="button" className="button" onClick={() => inviteToOrganization(organization.id)} disabled={invitingOrgId === organization.id}>
                           {invitingOrgId === organization.id ? "Inviting..." : "Invite"}
                         </button>
                       </div>
@@ -749,7 +874,7 @@ export default function DashboardPage() {
                     <p style={{ margin: "0.25rem 0 0.65rem", fontSize: "0.84rem", color: "var(--muted)" }}>
                       Join workspace {invite.organization.slug} before {formatShortDate(invite.expiresAt)}.
                     </p>
-                    <button className="button button--primary" onClick={() => acceptInvite(invite.id)} disabled={acceptingInviteId === invite.id}>
+                    <button type="button" className="button button--primary" onClick={() => acceptInvite(invite.id)} disabled={acceptingInviteId === invite.id}>
                       {acceptingInviteId === invite.id ? "Joining..." : "Accept invite"}
                     </button>
                   </div>

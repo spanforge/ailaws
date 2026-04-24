@@ -1,4 +1,5 @@
 import { getLawBySlug, laws } from "@/lib/lexforge-data";
+import { getEffectiveEvidenceStatus, type EvidenceArtifactRecord } from "@/lib/evidence-artifacts";
 import { runRulesEngine, type AssessmentInput, type AssessmentResult } from "@/lib/rules-engine";
 import { enrichAssessmentResults, getFreshnessTone } from "@/lib/smb";
 
@@ -199,7 +200,9 @@ export function buildDriftTriggers(params: {
   createdAt: string | Date;
   results: ReturnType<typeof enrichAssessmentResults>;
   checklistItems?: WorkspaceChecklistItem[];
+  evidenceArtifacts?: Array<EvidenceArtifactRecord & { checklistItemTitle?: string | null; priority?: string | null }>;
   changelogEntries?: Array<{ lawSlug: string; changedAt: string; summary: string; lawShortTitle?: string }>;
+  systemChangeEvents?: Array<{ occurredAt: string; source: string; eventType: string; summary: string; environment?: string | null; recommendation?: string | null }>;
 }): DriftTrigger[] {
   const createdAt = typeof params.createdAt === "string" ? new Date(params.createdAt) : params.createdAt;
   const assessmentAgeDays = Math.max(0, Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24)));
@@ -240,6 +243,34 @@ export function buildDriftTriggers(params: {
       severity: "medium",
       title: "Execution drift",
       reason: `Critical checklist work is still open: ${openCritical.title}.`,
+    });
+  }
+
+  const staleEvidence = (params.evidenceArtifacts ?? []).find((artifact) => getEffectiveEvidenceStatus(artifact) === "stale");
+  if (staleEvidence) {
+    triggers.push({
+      severity: staleEvidence.priority === "critical" ? "high" : "medium",
+      title: "Evidence freshness drift",
+      reason: `Evidence linked to ${staleEvidence.checklistItemTitle ?? "a checklist item"} is stale and should be refreshed before external reliance.`,
+    });
+  }
+
+  const missingCriticalEvidence = (params.evidenceArtifacts ?? []).length === 0 && openCritical;
+  if (missingCriticalEvidence) {
+    triggers.push({
+      severity: "high",
+      title: "Evidence coverage drift",
+      reason: `Critical checklist work is open with no linked evidence artifacts: ${openCritical.title}.`,
+    });
+  }
+
+  const systemChange = params.systemChangeEvents?.find((entry) => new Date(entry.occurredAt) > createdAt);
+  if (systemChange) {
+    const highImpact = systemChange.environment === "production" || /deploy|release|migration/i.test(systemChange.eventType);
+    triggers.push({
+      severity: highImpact ? "high" : "medium",
+      title: "System-change drift",
+      reason: `${systemChange.source} reported ${systemChange.eventType} activity after this assessment: ${systemChange.summary}${systemChange.recommendation ? ` ${systemChange.recommendation}` : ""}`,
     });
   }
 

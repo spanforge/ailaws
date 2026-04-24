@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { laws } from "@/lib/lexforge-data";
 import { runRulesEngine, RULES_ENGINE_VERSION, type AssessmentInput } from "@/lib/rules-engine";
+import { buildComplianceAnalysis, normalizeAssessmentInput } from "@/lib/compliance-analysis";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { captureException } from "@/lib/monitoring";
@@ -39,32 +40,36 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const results = runRulesEngine(laws, body);
+    const normalizedInput = normalizeAssessmentInput(body);
+    const results = runRulesEngine(laws, normalizedInput);
+    const analysis = buildComplianceAnalysis(normalizedInput, results);
 
     const assessment = await prisma.assessment.create({
       data: {
         userId,
         name: body.name ?? null,
         companyProfile: JSON.stringify({
-          company_name: body.company_name ?? "",
-          hq_region: body.hq_region,
-          company_size: body.company_size,
-          industry: body.industry ?? "",
-          target_markets: body.target_markets,
+          company_name: normalizedInput.company_name ?? "",
+          hq_region: normalizedInput.hq_region,
+          company_size: normalizedInput.company_size,
+          industry: normalizedInput.industry ?? "",
+          target_markets: normalizedInput.target_markets,
         }),
         productProfile: JSON.stringify({
-          product_preset: body.product_preset ?? "",
-          product_type: body.product_type,
-          use_cases: body.use_cases,
-          deployment_context: body.deployment_context,
+          product_preset: normalizedInput.product_preset ?? "",
+          system_description: normalizedInput.system_description ?? "",
+          product_type: normalizedInput.product_type,
+          use_cases: normalizedInput.use_cases,
+          deployment_context: normalizedInput.deployment_context,
         }),
         technicalProfile: JSON.stringify({
-          uses_ai: body.uses_ai,
-          uses_biometric_data: body.uses_biometric_data,
-          processes_personal_data: body.processes_personal_data,
-          processes_eu_personal_data: body.processes_eu_personal_data,
-          automated_decisions: body.automated_decisions,
-          risk_self_assessment: body.risk_self_assessment ?? "limited",
+          uses_ai: normalizedInput.uses_ai,
+          uses_biometric_data: normalizedInput.uses_biometric_data,
+          processes_personal_data: normalizedInput.processes_personal_data,
+          processes_eu_personal_data: normalizedInput.processes_eu_personal_data,
+          automated_decisions: normalizedInput.automated_decisions,
+          data_types: normalizedInput.data_types ?? [],
+          risk_self_assessment: normalizedInput.risk_self_assessment ?? "limited",
         }),
         results: {
           create: results.map((r) => ({
@@ -80,7 +85,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({ id: assessment.id, results }, { status: 201 });
+    return NextResponse.json({ id: assessment.id, results, analysis, normalizedInput }, { status: 201 });
   } catch (error) {
     await captureException(error, {
       tags: { surface: "assessments", action: "create" },
@@ -101,7 +106,7 @@ export async function GET() {
     include: {
       results: true,
       checklists: {
-        include: { items: true },
+        include: { items: { include: { evidenceArtifacts: true } } },
         orderBy: { createdAt: "desc" },
       },
     },

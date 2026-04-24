@@ -50,8 +50,9 @@
 1. **Immediately** rotate `AUTH_SECRET` and force all sessions to expire.
 2. Review access logs for unusual patterns (IPs, user agents, endpoints hit).
 3. Check admin audit log: `GET /api/admin/editorial/audit-log`
-4. Notify affected users per your data breach policy.
-5. Document timeline and actions taken.
+4. Check admin and org action audit log: `GET /api/admin/action-audit`
+5. Notify affected users per your data breach policy.
+6. Document timeline and actions taken.
 
 ---
 

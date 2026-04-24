@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 
 function getSafeToken(value: string | null) {
   const token = value?.trim();
   return token ? token : null;
 }
 
-export default function JoinWorkspacePage() {
+function JoinWorkspacePageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { status } = useSession();
@@ -102,5 +102,24 @@ export default function JoinWorkspacePage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function JoinWorkspacePage() {
+  return (
+    <Suspense fallback={
+      <div className="auth-page">
+        <div className="auth-card">
+          <div className="auth-brand">
+            <span className="auth-logo">Spanforge Compass</span>
+            <p className="auth-tagline">AI Compliance Evidence Workspace</p>
+          </div>
+          <h1 className="auth-heading">Join workspace</h1>
+          <p className="auth-note">Preparing your workspace invitation…</p>
+        </div>
+      </div>
+    }>
+      <JoinWorkspacePageContent />
+    </Suspense>
   );
 }

@@ -9,6 +9,7 @@
     "lint": "next lint",
     "smoke": "node scripts/smoke-test.mjs",
     "test": "vitest run",
+    "test:integration": "vitest run tests/integration",
     "test:unit": "vitest run tests/unit",
     "test:smoke": "vitest run tests/smoke",
     "test:watch": "vitest",

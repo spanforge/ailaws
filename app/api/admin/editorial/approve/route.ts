@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { log } from "@/lib/monitoring";
+import { withRequestId } from "@/lib/request-context";
 
 async function requireAdmin() {
   const session = await auth();
@@ -126,13 +127,43 @@ export async function POST(req: NextRequest) {
   } else {
     const existing = await prisma.obligation.findUnique({
       where: { id: body.entityId },
-      select: { reviewStatus: true, lawId: true },
+      select: {
+        reviewStatus: true,
+        lawId: true,
+        sourceKind: true,
+        sourceCitationFull: true,
+        sourceExcerpt: true,
+        confidenceLevel: true,
+        editorNotes: true,
+      },
     });
     if (!existing) return NextResponse.json({ error: "Obligation not found" }, { status: 404 });
 
     const updates: Record<string, unknown> = { reviewStatus: body.newStatus };
     if (body.newStatus === "verified") updates.verifiedAt = new Date();
     if (body.changeReason) updates.changeReason = body.changeReason;
+    if (body.notes) updates.editorNotes = body.notes;
+
+    if (body.fieldEdits) {
+      for (const [field, value] of Object.entries(body.fieldEdits)) {
+        const ALLOWED_FIELDS = ["sourceKind", "sourceCitationFull", "sourceExcerpt", "confidenceLevel", "editorNotes"];
+        if (ALLOWED_FIELDS.includes(field)) {
+          const oldVal = (existing as Record<string, unknown>)[field] as string | null ?? null;
+          updates[field] = value;
+          auditEntries.push({
+            entityType: "obligation",
+            entityId: body.entityId,
+            actorId,
+            fieldName: field,
+            oldValue: oldVal,
+            newValue: value,
+            changeReason: body.changeReason ?? null,
+            obligationId: body.entityId,
+            lawId: existing.lawId,
+          });
+        }
+      }
+    }
 
     auditEntries.push({
       entityType: "obligation",
@@ -149,6 +180,17 @@ export async function POST(req: NextRequest) {
     await prisma.$transaction([
       prisma.obligation.update({ where: { id: body.entityId }, data: updates }),
       prisma.contentEditAuditLog.createMany({ data: auditEntries }),
+      prisma.contentApproval.create({
+        data: {
+          entityType: "obligation",
+          entityId: body.entityId,
+          reviewerId: actorId,
+          approverId: actorId,
+          status: body.newStatus === "verified" ? "approved" : "rejected",
+          notes: body.notes ?? null,
+          resolvedAt: new Date(),
+        },
+      }),
     ]);
   }
 
@@ -157,6 +199,7 @@ export async function POST(req: NextRequest) {
     entityType: body.entityType,
     entityId: body.entityId,
     newStatus: body.newStatus,
+    ...withRequestId(req),
   });
 
   return NextResponse.json({ ok: true, newStatus: body.newStatus });

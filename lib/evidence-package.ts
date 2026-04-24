@@ -1,5 +1,7 @@
 import { createHash, createHmac } from "node:crypto";
 import { getLawBySlug, laws } from "@/lib/lexforge-data";
+import { buildComplianceAnalysis, normalizeAssessmentInput } from "@/lib/compliance-analysis";
+import { summarizeEvidenceCoverage } from "@/lib/evidence-artifacts";
 import { runRulesEngine, type AssessmentInput, type AssessmentResult } from "@/lib/rules-engine";
 import {
   buildActionPlan,
@@ -17,6 +19,20 @@ type ChecklistItem = {
   title: string;
   status: string;
   priority: string | null;
+  citation?: string | null;
+  description?: string | null;
+  evidenceArtifacts?: Array<{
+    id: string;
+    title: string;
+    description: string | null;
+    artifactType: string;
+    sourceType: string | null;
+    sourceUrl: string | null;
+    status: string;
+    collectedAt: Date;
+    verifiedAt: Date | null;
+    expiresAt: Date | null;
+  }>;
 };
 
 type Checklist = {
@@ -48,7 +64,7 @@ function pickChecklist(assessment: AssessmentForEvidence): Checklist | null {
 }
 
 export function buildAssessmentEvidencePackage(assessment: AssessmentForEvidence) {
-  const input = parseAssessmentInput(assessment);
+  const input = normalizeAssessmentInput(parseAssessmentInput(assessment));
   const results: AssessmentResult[] = runRulesEngine(laws, input);
   const enriched = enrichAssessmentResults(results, input);
   const actionPlan = buildActionPlan(results);
@@ -57,6 +73,7 @@ export function buildAssessmentEvidencePackage(assessment: AssessmentForEvidence
   const preset = getProductPresetById(input.product_preset);
   const checklist = pickChecklist(assessment);
   const checklistItems = checklist?.items ?? [];
+  const evidenceArtifacts = checklistItems.flatMap((item) => item.evidenceArtifacts ?? []);
   const completedCount = checklistItems.filter((item) => item.status === "completed").length;
   const inProgressCount = checklistItems.filter((item) => item.status === "in_progress").length;
   const notStartedCount = checklistItems.filter((item) => item.status === "not_started").length;
@@ -85,7 +102,24 @@ export function buildAssessmentEvidencePackage(assessment: AssessmentForEvidence
       citation: null,
       category: null,
     })),
+    evidenceArtifacts: checklistItems.flatMap((item) =>
+      (item.evidenceArtifacts ?? []).map((artifact) => ({
+        ...artifact,
+        checklistItemTitle: item.title,
+        priority: item.priority,
+      })),
+    ),
   });
+  const analysis = buildComplianceAnalysis(
+    input,
+    results,
+    checklistItems.map((item) => ({
+      ...item,
+      citation: null,
+      category: null,
+    })),
+  );
+  const evidenceCoverage = summarizeEvidenceCoverage(evidenceArtifacts);
 
   const openCriticalGaps = clauseGapReport.entries
     .filter((entry) => entry.priority === "critical" && entry.status !== "covered")
@@ -121,6 +155,15 @@ export function buildAssessmentEvidencePackage(assessment: AssessmentForEvidence
       urgentActions: actionPlan.topUrgentActions.length,
       checklistCompletionPct: checklistItems.length > 0 ? Math.round((completedCount / checklistItems.length) * 100) : 0,
     },
+    analysis: {
+      riskLevel: analysis.riskLevel,
+      riskScore: analysis.riskScore,
+      complianceScore: analysis.complianceScore,
+      auditReadinessScore: analysis.auditReadinessScore,
+      blockers: analysis.blockers,
+      detectedUseCases: analysis.detectedUseCases,
+      detectedDataTypes: analysis.detectedDataTypes,
+    },
     trustScorecard,
     results: enriched.map((result) => ({
       lawSlug: result.law_slug,
@@ -146,8 +189,22 @@ export function buildAssessmentEvidencePackage(assessment: AssessmentForEvidence
           completedCount,
           inProgressCount,
           notStartedCount,
+          evidenceArtifacts: evidenceCoverage.total,
+          verifiedArtifacts: evidenceCoverage.verified,
         }
       : null,
+    evidenceArtifacts: evidenceArtifacts.map((artifact) => ({
+      id: artifact.id,
+      title: artifact.title,
+      description: artifact.description,
+      artifactType: artifact.artifactType,
+      sourceType: artifact.sourceType,
+      sourceUrl: artifact.sourceUrl,
+      status: artifact.status,
+      collectedAt: artifact.collectedAt,
+      verifiedAt: artifact.verifiedAt,
+      expiresAt: artifact.expiresAt,
+    })),
     gapReport: {
       obligationCoverage: clauseGapReport.totals,
       lawCoverage: enriched
@@ -168,6 +225,12 @@ export function buildAssessmentEvidencePackage(assessment: AssessmentForEvidence
       clauseEntries: clauseGapReport.entries,
       openCriticalGaps,
       summary: clauseGapReport.summary,
+    },
+    traceability: {
+      mappedLaws: analysis.mappedLaws,
+      checklistLinkedItems: checklistItems.filter((item) => Boolean(item.lawSlug)).length,
+      totalChecklistItems: checklistItems.length,
+      evidenceCoverage,
     },
     driftTriggers,
     penalties,

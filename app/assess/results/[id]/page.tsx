@@ -4,10 +4,13 @@ import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getLawBySlug, laws } from "@/lib/lexforge-data";
+import { buildAssessmentAssumptions, buildComplianceAnalysis, normalizeAssessmentInput } from "@/lib/compliance-analysis";
+import { getEffectiveEvidenceStatus, summarizeEvidenceCoverage } from "@/lib/evidence-artifacts";
 import { runRulesEngine, type AssessmentInput, type AssessmentResult } from "@/lib/rules-engine";
 import {
   TEMPLATE_LIBRARY,
   buildActionPlan,
+  buildAssessmentDiff,
   buildAssessmentDeltaSummary,
   buildExecutiveVerdict,
   buildRecommendedControls,
@@ -33,7 +36,12 @@ type ChecklistItem = {
   title: string;
   description: string | null;
   category: string | null;
+  citation: string | null;
+  dueDate: string | null;
   priority: string | null;
+  assigneeId?: string | null;
+  assignee?: { id: string; name: string | null; email: string | null } | null;
+  evidenceArtifacts?: Array<{ id: string; status: string }>;
   status: "not_started" | "in_progress" | "completed";
 };
 
@@ -67,6 +75,8 @@ type ChangeEntry = {
   summary: string;
   changedAt: string;
 };
+
+type AssignableMember = { id: string; name: string | null; email: string | null; role: string };
 
 const STATUS_CONFIG = {
   likely_applies: { label: "Likely Applies", color: "var(--red)", bg: "rgba(230,57,70,0.1)" },
@@ -205,7 +215,7 @@ function mapChecklistItems(checklist: Checklist | null, itemStatuses: Record<str
     id: item.id,
     lawSlug: item.lawSlug,
     title: item.title,
-    citation: null,
+    citation: item.citation,
     category: item.category,
     priority: item.priority,
     status: itemStatuses[item.id] ?? item.status,
@@ -227,7 +237,7 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
   const [checklist, setChecklist] = useState<Checklist | null>(null);
   const [loadingChecklist, setLoadingChecklist] = useState(false);
   const [itemStatuses, setItemStatuses] = useState<Record<string, ChecklistItem["status"]>>({});
-  const [activeTab, setActiveTab] = useState<"verdict" | "results" | "actions" | "checklist" | "gaps" | "simulate">("verdict");
+  const [activeTab, setActiveTab] = useState<"verdict" | "results" | "actions" | "compare" | "checklist" | "gaps" | "simulate">("verdict");
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [assessmentRecord, setAssessmentRecord] = useState<AssessmentRecord | null>(null);
   const [reviewStatus, setReviewStatus] = useState<string>("draft");
@@ -235,6 +245,7 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
   const [founderMode, setFounderMode] = useState(false);
   const [alerts, setAlerts] = useState<ChangeEntry[]>([]);
   const [simulationInput, setSimulationInput] = useState<AssessmentInput | null>(null);
+  const [assignableMembers, setAssignableMembers] = useState<AssignableMember[]>([]);
 
   useEffect(() => {
     const storedResults = sessionStorage.getItem(`assessment-${id}`);
@@ -242,7 +253,7 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
     const hasSessionBackedAssessment = Boolean(storedResults || storedInput);
 
     if (storedInput) {
-      const parsedInput = JSON.parse(storedInput) as AssessmentInput;
+      const parsedInput = normalizeAssessmentInput(JSON.parse(storedInput) as AssessmentInput);
       setInput(parsedInput);
       setSimulationInput(parsedInput);
       setResults(runRulesEngine(laws, parsedInput));
@@ -258,12 +269,15 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
         })
         .catch(() => null),
       fetch("/api/alerts").then((response) => response.json()).catch(() => ({ data: [] })),
+      fetch("/api/organizations").then((response) => response.json()).catch(() => ({ data: [] })),
     ])
-      .then(([data, alertsResponse]) => {
+      .then(([data, alertsResponse, organizationsResponse]) => {
         const records = ((data?.data ?? []) as AssessmentRecord[]);
         const match = records.find((assessment) => assessment.id === id);
 
         setAlerts((alertsResponse.data ?? []) as ChangeEntry[]);
+        const members = ((organizationsResponse.data ?? []) as Array<{ members: AssignableMember[] }>).flatMap((organization) => organization.members ?? []);
+        setAssignableMembers(Array.from(new Map(members.map((member) => [member.id, member])).values()));
 
         if (!match) {
           if (!hasSessionBackedAssessment) {
@@ -272,7 +286,7 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
           return;
         }
 
-        const parsedInput = parseAssessmentInput(match);
+        const parsedInput = normalizeAssessmentInput(parseAssessmentInput(match));
         setInput(parsedInput);
         setSimulationInput(parsedInput);
         setResults(runRulesEngine(laws, parsedInput));
@@ -311,16 +325,41 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
     setLoadingChecklist(false);
   }
 
-  function updateItemStatus(itemId: string, status: ChecklistItem["status"]) {
-    setItemStatuses((current) => ({ ...current, [itemId]: status }));
+  function updateChecklistItem(itemId: string, patch: { status?: ChecklistItem["status"]; assigneeId?: string | null; assignee?: ChecklistItem["assignee"] }) {
+    if (patch.status) {
+      setItemStatuses((current) => ({ ...current, [itemId]: patch.status! }));
+    }
+    setChecklist((current) => current ? {
+      ...current,
+      items: current.items.map((item) => item.id === itemId ? {
+        ...item,
+        ...(patch.status ? { status: patch.status } : {}),
+        ...(patch.assigneeId !== undefined ? { assigneeId: patch.assigneeId, assignee: patch.assignee ?? null } : {}),
+      } : item),
+    } : current);
 
     if (!checklist) return;
 
     fetch(`/api/checklists/${checklist.id}/items/${itemId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({
+        ...(patch.status ? { status: patch.status } : {}),
+        ...(patch.assigneeId !== undefined ? { assigneeId: patch.assigneeId } : {}),
+      }),
     }).catch(() => undefined);
+  }
+
+  function updateItemStatus(itemId: string, status: ChecklistItem["status"]) {
+    updateChecklistItem(itemId, { status });
+  }
+
+  function updateItemAssignee(itemId: string, assigneeId: string) {
+    const assignee = assignableMembers.find((member) => member.id === assigneeId) ?? null;
+    updateChecklistItem(itemId, {
+      assigneeId: assigneeId || null,
+      assignee: assignee ? { id: assignee.id, name: assignee.name, email: assignee.email } : null,
+    });
   }
 
   function updateSimulationField<K extends keyof AssessmentInput>(field: K, value: AssessmentInput[K]) {
@@ -354,6 +393,7 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
   const unlikely = enriched.filter((result) => result.applicability_status === "unlikely");
   const preset = getProductPresetById(input.product_preset);
   const deltaSummary = buildAssessmentDeltaSummary(results, previousResults);
+  const assessmentDiff = buildAssessmentDiff(results, previousResults);
   const createdAtLabel = assessmentRecord?.createdAt
     ? new Date(assessmentRecord.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     : null;
@@ -362,10 +402,20 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
   const pendingChecklistCount = checklist ? checklist.items.length - checklistCompleted : 0;
   const trustScorecard = buildTrustScorecard(enriched, checklistItems);
   const clauseGapReport = buildClauseGapReport(results, checklistItems);
+  const evidenceArtifacts = checklist?.items.flatMap((item) => item.evidenceArtifacts ?? []) ?? [];
+  const evidenceCoverage = summarizeEvidenceCoverage(evidenceArtifacts);
+  const staleEvidenceCount = evidenceArtifacts.filter((artifact) => getEffectiveEvidenceStatus(artifact) === "stale").length;
   const driftTriggers = buildDriftTriggers({
     createdAt: assessmentRecord?.createdAt ?? new Date().toISOString(),
     results: enriched,
     checklistItems,
+    evidenceArtifacts: (checklist?.items ?? []).flatMap((item) =>
+      (item.evidenceArtifacts ?? []).map((artifact) => ({
+        ...artifact,
+        checklistItemTitle: item.title,
+        priority: item.priority,
+      })),
+    ),
     changelogEntries: alerts.map((entry) => ({
       lawSlug: entry.lawSlug,
       changedAt: entry.changedAt,
@@ -376,6 +426,8 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
   const simulationDelta = simulationInput ? buildSimulationDeltaFromResults(input, simulationInput, results) : null;
   const executiveVerdict = buildExecutiveVerdict(results, input);
   const recommendedControls = buildRecommendedControls(results);
+  const analysis = buildComplianceAnalysis(input, results, checklistItems);
+  const explicitAssumptions = buildAssessmentAssumptions(input, analysis.normalizedInput);
   const assessmentAgeDays = assessmentRecord?.createdAt
     ? Math.floor((Date.now() - new Date(assessmentRecord.createdAt).getTime()) / (1000 * 60 * 60 * 24))
     : 0;
@@ -490,6 +542,98 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
         <p style={{ color: "var(--muted)", margin: "0 0 1.5rem" }}>
           Executive verdict, clause-level gap tracking, trust posture, and drift signals in one working surface.
         </p>
+
+        {checklist ? (
+          <section className="content-card" style={{ marginBottom: "1.25rem", padding: "1rem 1.1rem", border: staleEvidenceCount > 0 ? "1px solid rgba(230,57,70,0.16)" : undefined, background: staleEvidenceCount > 0 ? "rgba(230,57,70,0.04)" : undefined }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", alignItems: "flex-start" }}>
+              <div>
+                <p style={{ margin: "0 0 0.25rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+                  Evidence drift
+                </p>
+                <h2 style={{ margin: 0, color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.3rem" }}>
+                  {evidenceCoverage.verified}/{evidenceCoverage.total} verified artifacts
+                </h2>
+                <p style={{ margin: "0.4rem 0 0", color: "var(--muted)", fontSize: "0.9rem", lineHeight: 1.55 }}>
+                  {staleEvidenceCount > 0
+                    ? `${staleEvidenceCount} evidence artifact${staleEvidenceCount === 1 ? "" : "s"} are stale. Refresh them before relying on this package externally.`
+                    : evidenceCoverage.total > 0
+                      ? `${evidenceCoverage.active} linked artifact${evidenceCoverage.active === 1 ? "" : "s"} support this assessment's task layer.`
+                      : "No evidence has been attached yet. Add evidence to improve audit readiness and reduce drift risk."}
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+                <Link href="/evidence" className="button button--primary">Open evidence workspace</Link>
+                <a href={`/api/assessments/${id}/evidence`} className="button" style={{ textDecoration: "none" }}>Export evidence JSON</a>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        <section className="content-card" style={{ marginBottom: "1.25rem", padding: "1rem 1.1rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", alignItems: "flex-start" }}>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: "0 0 0.25rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+                Classification engine
+              </p>
+              <h2 style={{ margin: 0, color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.35rem" }}>
+                {analysis.riskLevel === "unacceptable" ? "Potentially unacceptable" : `${analysis.riskLevel} risk`} system
+              </h2>
+              <p style={{ margin: "0.45rem 0 0", color: "var(--muted)", lineHeight: 1.6 }}>
+                {analysis.systemSummary}
+              </p>
+              <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap", marginTop: "0.75rem" }}>
+                {analysis.detectedUseCases.map((useCase) => (
+                  <Pill key={useCase} label={useCase.replace(/_/g, " ")} />
+                ))}
+                {analysis.detectedDataTypes.map((dataType) => (
+                  <Pill key={dataType} label={dataType.replace(/_/g, " ")} color="#2b6cb0" />
+                ))}
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(120px, 1fr))", gap: "0.75rem", minWidth: "280px" }}>
+              <MiniMetric label="Risk score" value={analysis.riskScore} color={analysis.riskLevel === "high" || analysis.riskLevel === "unacceptable" ? "var(--red)" : "#915a1e"} />
+              <MiniMetric label="Compliance score" value={analysis.complianceScore} color={analysis.complianceScore >= 75 ? "var(--green)" : analysis.complianceScore >= 55 ? "#915a1e" : "var(--red)"} />
+              <MiniMetric label="Audit readiness" value={analysis.auditReadinessScore} color={analysis.auditReadinessScore >= 75 ? "var(--green)" : analysis.auditReadinessScore >= 55 ? "#915a1e" : "var(--red)"} />
+              <MiniMetric label="Blockers" value={analysis.blockers.length} color={analysis.blockers.length === 0 ? "var(--green)" : "var(--red)"} />
+            </div>
+          </div>
+          {analysis.mappedLaws.length > 0 ? (
+            <div style={{ display: "grid", gap: "0.65rem", marginTop: "1rem" }}>
+              {analysis.mappedLaws.slice(0, 3).map((law) => (
+                <div key={law.lawSlug} style={{ padding: "0.85rem 0.95rem", borderRadius: "14px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+                    <strong style={{ color: "var(--navy)" }}>{law.lawShortTitle}</strong>
+                    <Pill label={law.status.replace(/_/g, " ")} color={law.status === "likely_applies" ? "var(--red)" : "#915a1e"} />
+                  </div>
+                  <p style={{ margin: "0.35rem 0 0", color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.55 }}>{law.reason}</p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <div style={{ marginTop: "1rem", padding: "0.95rem", borderRadius: "14px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+            <p style={{ margin: "0 0 0.35rem", fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)" }}>
+              Assessment assumptions
+            </p>
+            <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "var(--navy)", fontSize: "0.9rem", lineHeight: 1.6 }}>
+              {explicitAssumptions.map((assumption) => (
+                <li key={assumption}>{assumption}</li>
+              ))}
+            </ul>
+          </div>
+          {analysis.blockers.length > 0 ? (
+            <div style={{ display: "grid", gap: "0.65rem", marginTop: "1rem" }}>
+              {analysis.blockers.map((blocker) => (
+                <div key={blocker.title} style={{ padding: "0.85rem 0.95rem", borderRadius: "14px", background: "rgba(230,57,70,0.06)", border: "1px solid rgba(230,57,70,0.14)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                    <Pill label={blocker.severity} color="var(--red)" />
+                    <strong style={{ color: "var(--navy)" }}>{blocker.title}</strong>
+                  </div>
+                  <p style={{ margin: "0.35rem 0 0", color: "var(--muted)", fontSize: "0.88rem" }}>{blocker.reason}</p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
 
         {(isStale || hasLawChangeSinceAssessment) ? (
           <div
@@ -736,6 +880,11 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
           <button className={`button ${activeTab === "actions" ? "button--primary" : ""}`} onClick={() => setActiveTab("actions")}>
             Action Plan ({actionPlan.allActions.length})
           </button>
+          {previousResults ? (
+            <button className={`button ${activeTab === "compare" ? "button--primary" : ""}`} onClick={() => setActiveTab("compare")}>
+              Compare ({assessmentDiff.length})
+            </button>
+          ) : null}
           <button className={`button ${activeTab === "gaps" ? "button--primary" : ""}`} onClick={() => setActiveTab("gaps")}>
             Gap report ({clauseGapReport.totals.gaps + clauseGapReport.totals.notGenerated})
           </button>
@@ -878,6 +1027,11 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
                                   Scoring trace · {pct}% match · v{trace.rulesEngineVersion}
                                 </summary>
                                 <div style={{ marginTop: "0.75rem", fontSize: "0.85rem", lineHeight: 1.6 }}>
+                                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.65rem", marginBottom: "0.8rem" }}>
+                                    <TraceMetric label="Matched weight" value={`${trace.matchedWeight}/${trace.totalWeight}`} />
+                                    <TraceMetric label="Matched rules" value={`${trace.scoreBreakdown.matchedRuleCount}/${trace.scoreBreakdown.totalRuleCount}`} />
+                                    <TraceMetric label="Weighted score" value={`${Math.round(trace.score * 100)}%`} />
+                                  </div>
                                   {matchedRules.length > 0 && (
                                     <div style={{ marginBottom: "0.6rem" }}>
                                       <p style={{ margin: "0 0 0.35rem", fontWeight: 700, color: "var(--green)", fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.04em" }}>
@@ -968,15 +1122,27 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
         ) : null}
 
         {activeTab === "actions" ? <ActionPlanView actions={actionPlan.allActions} /> : null}
+        {activeTab === "compare" ? <AssessmentComparisonView deltaSummary={deltaSummary} diffEntries={assessmentDiff} /> : null}
         {activeTab === "gaps" ? <GapReportView report={clauseGapReport} /> : null}
         {activeTab === "simulate" ? (
           <SimulationView input={simulationInput} delta={simulationDelta} onChangeField={updateSimulationField} onToggleValue={toggleSimulationValue} />
         ) : null}
         {activeTab === "checklist" && checklist ? (
-          <ChecklistView checklist={checklist} itemStatuses={itemStatuses} onUpdateStatus={updateItemStatus} />
+          <ChecklistView checklist={checklist} itemStatuses={itemStatuses} onUpdateStatus={updateItemStatus} onAssignAssignee={updateItemAssignee} assignableMembers={assignableMembers} />
         ) : null}
       </div>
     </main>
+  );
+}
+
+function TraceMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ padding: "0.6rem 0.7rem", borderRadius: "12px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+      <p style={{ margin: "0 0 0.18rem", fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)" }}>
+        {label}
+      </p>
+      <p style={{ margin: 0, color: "var(--navy)", fontWeight: 700 }}>{value}</p>
+    </div>
   );
 }
 
@@ -1155,6 +1321,71 @@ function ExecutiveVerdictView({
         <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
           <Link href="/templates" className="button">Browse export templates</Link>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AssessmentComparisonView({
+  deltaSummary,
+  diffEntries,
+}: {
+  deltaSummary: ReturnType<typeof buildAssessmentDeltaSummary> | null;
+  diffEntries: ReturnType<typeof buildAssessmentDiff>;
+}) {
+  const tone = (changeType: ReturnType<typeof buildAssessmentDiff>[number]["changeType"]) => {
+    if (changeType === "new" || changeType === "increased") {
+      return { color: "var(--red)", background: "rgba(230,57,70,0.1)", label: changeType === "new" ? "New" : "Increased" };
+    }
+    return { color: "var(--green)", background: "rgba(42,123,98,0.12)", label: changeType === "reduced" ? "Removed" : "Decreased" };
+  };
+
+  if (!deltaSummary && diffEntries.length === 0) {
+    return (
+      <div className="content-card">
+        <p style={{ margin: 0, color: "var(--muted)" }}>No previous assessment is available for comparison yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="stack">
+      {deltaSummary ? (
+        <div className="content-card">
+          <p style={{ margin: "0 0 0.3rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+            Comparison summary
+          </p>
+          <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.95rem", lineHeight: 1.6 }}>{deltaSummary.summary}</p>
+        </div>
+      ) : null}
+
+      <div className="content-card">
+        <p style={{ margin: "0 0 0.6rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+          Law-by-law diff
+        </p>
+        {diffEntries.length === 0 ? (
+          <p style={{ margin: 0, color: "var(--muted)" }}>No material law shifts were detected against the previous saved assessment.</p>
+        ) : (
+          <div className="stack">
+            {diffEntries.map((entry) => {
+              const config = tone(entry.changeType);
+              return (
+                <div key={entry.lawSlug} style={{ padding: "0.9rem 1rem", borderRadius: "14px", border: "1px solid rgba(16,32,48,0.08)", background: "rgba(16,32,48,0.03)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
+                    <strong style={{ color: "var(--navy)" }}>{entry.lawShortTitle}</strong>
+                    <span style={{ display: "inline-flex", padding: "0.22rem 0.6rem", borderRadius: "999px", fontSize: "0.76rem", fontWeight: 700, color: config.color, background: config.background }}>
+                      {config.label}
+                    </span>
+                  </div>
+                  <p style={{ margin: "0.35rem 0 0", color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.55 }}>
+                    Status moved from {entry.previousStatus.replace(/_/g, " ")} to {entry.currentStatus.replace(/_/g, " ")}.
+                    Score changed from {Math.round(entry.previousScore * 100)}% to {Math.round(entry.currentScore * 100)}%.
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1455,10 +1686,14 @@ function ChecklistView({
   checklist,
   itemStatuses,
   onUpdateStatus,
+  onAssignAssignee,
+  assignableMembers,
 }: {
   checklist: Checklist;
   itemStatuses: Record<string, ChecklistItem["status"]>;
   onUpdateStatus: (id: string, status: ChecklistItem["status"]) => void;
+  onAssignAssignee: (id: string, assigneeId: string) => void;
+  assignableMembers: AssignableMember[];
 }) {
   const byLaw = checklist.items.reduce<Record<string, ChecklistItem[]>>((accumulator, item) => {
     const law = item.lawSlug ? getLawBySlug(item.lawSlug) : null;
@@ -1512,18 +1747,36 @@ function ChecklistView({
                           </span>
                         ) : null}
                         <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{item.category}</span>
+                        {item.dueDate ? <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>Due {new Date(item.dueDate).toLocaleDateString("en-US")}</span> : null}
+                        {item.assignee ? <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>Owner {item.assignee.name ?? item.assignee.email}</span> : null}
+                        <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{item.evidenceArtifacts?.length ?? 0} evidence</span>
                       </div>
                       <p style={{ margin: "0.4rem 0 0", color: "var(--muted)", fontSize: "0.9rem" }}>{item.description}</p>
+                      {item.citation ? <p style={{ margin: "0.35rem 0 0", color: "var(--muted)", fontSize: "0.78rem" }}>{item.citation}</p> : null}
                     </div>
-                    <select
-                      value={status}
-                      onChange={(event) => onUpdateStatus(item.id, event.target.value as ChecklistItem["status"])}
-                      style={{ fontSize: "0.82rem", padding: "0.35rem 0.65rem", minHeight: "auto", borderRadius: "10px" }}
-                    >
-                      <option value="not_started">Not started</option>
-                      <option value="in_progress">In progress</option>
-                      <option value="completed">Completed</option>
-                    </select>
+                    <div style={{ display: "grid", gap: "0.45rem", minWidth: "190px" }}>
+                      <select
+                        value={item.assigneeId ?? ""}
+                        onChange={(event) => onAssignAssignee(item.id, event.target.value)}
+                        style={{ fontSize: "0.82rem", padding: "0.35rem 0.65rem", minHeight: "auto", borderRadius: "10px" }}
+                      >
+                        <option value="">Assign owner</option>
+                        {assignableMembers.map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {(member.name ?? member.email ?? "Member") + ` (${member.role})`}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={status}
+                        onChange={(event) => onUpdateStatus(item.id, event.target.value as ChecklistItem["status"])}
+                        style={{ fontSize: "0.82rem", padding: "0.35rem 0.65rem", minHeight: "auto", borderRadius: "10px" }}
+                      >
+                        <option value="not_started">Not started</option>
+                        <option value="in_progress">In progress</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
               );

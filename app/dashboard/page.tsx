@@ -7,6 +7,7 @@ import { getLawBySlug, laws } from "@/lib/lexforge-data";
 import { getEffectiveEvidenceStatus, summarizeEvidenceCoverage } from "@/lib/evidence-artifacts";
 import { TEMPLATE_LIBRARY, buildActionPlan, enrichAssessmentResults, getFreshnessLabel, getLawLastReviewed } from "@/lib/smb";
 import { buildClauseGapReport, buildDriftTriggers, buildTrustScorecard, type WorkspaceChecklistItem } from "@/lib/workspace-intelligence";
+import type { ChangeImpactBrief, EvidenceRecommendation, RegulatoryUpdateBrief, WeeklyPriority } from "@/lib/product-intelligence";
 import type { AssessmentInput, AssessmentResult } from "@/lib/rules-engine";
 
 type Assessment = {
@@ -91,6 +92,13 @@ type IncomingInvite = {
   organization: { id: string; name: string; slug: string; createdAt: string };
 };
 
+type DashboardIntelligence = {
+  weeklyPriorityQueue: WeeklyPriority[];
+  changeImpactBriefs: ChangeImpactBrief[];
+  regulatoryUpdateBriefs: RegulatoryUpdateBrief[];
+  evidenceRecommendations: EvidenceRecommendation[];
+};
+
 function parseAssessmentInput(assessment: Assessment): AssessmentInput {
   return {
     ...JSON.parse(assessment.companyProfile ?? "{}"),
@@ -166,6 +174,7 @@ export default function DashboardPage() {
   const [complianceAlerts, setComplianceAlerts] = useState<ComplianceAlert[]>([]);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [incomingInvites, setIncomingInvites] = useState<IncomingInvite[]>([]);
+  const [dashboardIntelligence, setDashboardIntelligence] = useState<DashboardIntelligence | null>(null);
   const [orgName, setOrgName] = useState("");
   const [orgSlug, setOrgSlug] = useState("");
   const [inviteEmails, setInviteEmails] = useState<Record<string, string>>({});
@@ -191,13 +200,15 @@ export default function DashboardPage() {
       fetch("/api/alerts").then((response) => response.json()).catch(() => ({ data: [] })),
       fetch("/api/organizations").then((response) => response.json()).catch(() => ({ data: [] })),
       fetch("/api/organizations/invites").then((response) => response.json()).catch(() => ({ data: [] })),
-    ]).then(([assessmentResponse, savedResponse, alertsResponse, organizationsResponse, incomingInvitesResponse]) => {
+      fetch("/api/dashboard/intelligence").then((response) => (response.ok ? response.json() : { data: null })).catch(() => ({ data: null })),
+    ]).then(([assessmentResponse, savedResponse, alertsResponse, organizationsResponse, incomingInvitesResponse, intelligenceResponse]) => {
       setAssessments(assessmentResponse.data ?? []);
       setSavedSlugs(savedResponse.data ?? []);
       setAlerts(alertsResponse.data ?? []);
       setComplianceAlerts(alertsResponse.complianceAlerts ?? []);
       setOrganizations(organizationsResponse.data ?? []);
       setIncomingInvites(incomingInvitesResponse.data ?? []);
+      setDashboardIntelligence((intelligenceResponse.data ?? null) as DashboardIntelligence | null);
       setLoading(false);
     });
   }, [status]);
@@ -205,7 +216,8 @@ export default function DashboardPage() {
   const latestAssessment = assessments[0] ?? null;
   const latestChecklist = latestAssessment?.checklists?.[0] ?? null;
   const latestResults = latestAssessment ? mapStoredResults(latestAssessment) : [];
-  const latestActions = latestAssessment ? buildActionPlan(latestResults).topUrgentActions : [];
+  const latestActionPlan = latestAssessment ? buildActionPlan(latestResults) : null;
+  const latestActions = latestActionPlan?.topUrgentActions ?? [];
   const latestChecklistItems = mapChecklistItems(latestChecklist);
   const latestEvidenceArtifacts = latestChecklist?.items.flatMap((item) => item.evidenceArtifacts ?? []) ?? [];
   const latestEvidenceCoverage = summarizeEvidenceCoverage(latestEvidenceArtifacts);
@@ -284,6 +296,9 @@ export default function DashboardPage() {
 
   const showGettingStarted = assessments.length === 0 && savedSlugs.length === 0 && organizations.length === 0;
   const activeComplianceAlerts = complianceAlerts.filter((alert) => alert.status !== "resolved").slice(0, 4);
+  const weeklyPriorityQueue = dashboardIntelligence?.weeklyPriorityQueue ?? [];
+  const changeImpactBriefs = dashboardIntelligence?.changeImpactBriefs ?? [];
+  const regulatoryUpdateBriefs = dashboardIntelligence?.regulatoryUpdateBriefs ?? [];
 
   async function createOrganization() {
     if (!orgName.trim() || !orgSlug.trim()) return;
@@ -554,6 +569,81 @@ export default function DashboardPage() {
                     ? `Keep moving on the remaining ${latestChecklist.items.length - checklistCompleted} tasks.`
                     : "Generate a checklist from the assessment to turn obligations into tracked work."}
                 </p>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {(weeklyPriorityQueue.length > 0 || regulatoryUpdateBriefs.length > 0) ? (
+          <section style={{ marginBottom: "2rem" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(320px, 1fr)", gap: "1rem" }}>
+              <div className="content-card" style={{ padding: "1rem 1.1rem" }}>
+                <p style={{ margin: "0 0 0.25rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+                  This week
+                </p>
+                <h2 style={{ margin: 0, color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.3rem" }}>
+                  Operator queue
+                </h2>
+                <div className="stack" style={{ marginTop: "0.9rem" }}>
+                  {weeklyPriorityQueue.slice(0, 5).map((item) => (
+                    <div key={item.id} style={{ padding: "0.85rem 0.95rem", borderRadius: "14px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
+                        <strong style={{ color: "var(--navy)" }}>{item.title}</strong>
+                        <span style={{ fontSize: "0.74rem", fontWeight: 700, padding: "0.18rem 0.5rem", borderRadius: "999px", background: item.urgency === "high" ? "rgba(230,57,70,0.1)" : item.urgency === "medium" ? "rgba(244,162,97,0.14)" : "rgba(42,123,98,0.12)", color: item.urgency === "high" ? "var(--red)" : item.urgency === "medium" ? "#915a1e" : "var(--green)" }}>
+                          {item.urgency}
+                        </span>
+                      </div>
+                      <p style={{ margin: "0.3rem 0 0", color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.55 }}>{item.reason}</p>
+                      <p style={{ margin: "0.35rem 0 0", color: "var(--muted)", fontSize: "0.78rem" }}>Owner: {item.owner}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="content-card" style={{ padding: "1rem 1.1rem" }}>
+                <p style={{ margin: "0 0 0.25rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+                  Regulatory intelligence
+                </p>
+                <h2 style={{ margin: 0, color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.3rem" }}>
+                  Targeted update briefs
+                </h2>
+                <div className="stack" style={{ marginTop: "0.9rem" }}>
+                  {regulatoryUpdateBriefs.length > 0 ? regulatoryUpdateBriefs.slice(0, 4).map((brief) => (
+                    <div key={brief.id} style={{ padding: "0.85rem 0.95rem", borderRadius: "14px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+                      <strong style={{ color: "var(--navy)", display: "block" }}>{brief.headline}</strong>
+                      <p style={{ margin: "0.3rem 0 0", color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.55 }}>{brief.whyItMatters}</p>
+                      <p style={{ margin: "0.35rem 0 0", color: "var(--navy)", fontSize: "0.82rem" }}>{brief.nextStep}</p>
+                    </div>
+                  )) : (
+                    <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>Save laws or run assessments to start receiving targeted update summaries here.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {changeImpactBriefs.length > 0 ? (
+          <section style={{ marginBottom: "2rem" }}>
+            <div className="content-card" style={{ padding: "1rem 1.1rem" }}>
+              <p style={{ margin: "0 0 0.25rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+                Continuous monitoring
+              </p>
+              <h2 style={{ margin: 0, color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.3rem" }}>
+                Change impact briefs
+              </h2>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "0.8rem", marginTop: "0.9rem" }}>
+                {changeImpactBriefs.slice(0, 4).map((brief) => (
+                  <div key={brief.id} style={{ padding: "0.9rem", borderRadius: "14px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "0.6rem", alignItems: "center" }}>
+                      <strong style={{ color: "var(--navy)" }}>{brief.headline}</strong>
+                      <span style={{ fontSize: "0.72rem", fontWeight: 700, padding: "0.18rem 0.5rem", borderRadius: "999px", background: brief.severity === "high" ? "rgba(230,57,70,0.1)" : brief.severity === "medium" ? "rgba(244,162,97,0.14)" : "rgba(42,123,98,0.12)", color: brief.severity === "high" ? "var(--red)" : brief.severity === "medium" ? "#915a1e" : "var(--green)" }}>
+                        {brief.severity}
+                      </span>
+                    </div>
+                    <p style={{ margin: "0.35rem 0 0", color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.55 }}>{brief.whyItMatters}</p>
+                  </div>
+                ))}
               </div>
             </div>
           </section>

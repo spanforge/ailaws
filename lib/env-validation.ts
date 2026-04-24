@@ -23,6 +23,11 @@ const ENV_VARS: EnvVar[] = [
   { name: "RESEND_API_KEY", required: false, description: "Resend API key for email verification delivery" },
   { name: "NEXT_PUBLIC_SENTRY_DSN", required: false, description: "Sentry DSN for error monitoring" },
   { name: "SENTRY_AUTH_TOKEN", required: false, description: "Sentry auth token for source-map uploads" },
+  { name: "AI_ASSISTANT_API_URL", required: false, description: "Chat-completions endpoint for optional LLM-backed intake assistance" },
+  { name: "AI_ASSISTANT_API_KEY", required: false, description: "API key for the optional assistant model endpoint" },
+  { name: "AI_ASSISTANT_MODEL", required: false, description: "Optional model name sent to the assistant endpoint when required" },
+  { name: "AI_ASSISTANT_API_KEY_HEADER", required: false, description: "Optional auth header name for the assistant endpoint (default: authorization)" },
+  { name: "AI_ASSISTANT_AUTH_SCHEME", required: false, description: "Optional auth scheme for Authorization header (default: Bearer)" },
 ];
 
 export function validateEnvironment(): void {

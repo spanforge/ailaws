@@ -27,6 +27,11 @@ All variables should be set in `.env.local` (development) or via your hosting pl
 | `SENTRY_AUTH_TOKEN` | Sentry auth token for source-map upload during build. | Obtain from Sentry project settings |
 | `SENTRY_ORG` | Your Sentry organisation slug. | `acme-corp` |
 | `SENTRY_PROJECT` | Your Sentry project slug. | `lexforge` |
+| `AI_ASSISTANT_API_URL` | Optional chat-completions endpoint for LLM-backed intake assistance. Can point to Azure OpenAI, OpenAI-compatible gateways, or your own proxy. | `https://.../chat/completions` |
+| `AI_ASSISTANT_API_KEY` | API key for the optional assistant endpoint. | `sk-...` |
+| `AI_ASSISTANT_MODEL` | Optional model name sent in the request body when your endpoint expects it. | `gpt-4.1-mini` |
+| `AI_ASSISTANT_API_KEY_HEADER` | Optional auth header name if your endpoint does not use `Authorization`. Defaults to `authorization`. | `api-key` |
+| `AI_ASSISTANT_AUTH_SCHEME` | Optional auth scheme used with `Authorization`. Defaults to `Bearer`. | `Bearer` |
 
 ---
 

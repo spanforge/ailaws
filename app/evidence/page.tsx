@@ -8,6 +8,7 @@ import { normalizeAssessmentInput } from "@/lib/compliance-analysis";
 import { getEffectiveEvidenceStatus, getEvidenceFreshnessLabel, getEvidenceStatusTone, summarizeEvidenceCoverage } from "@/lib/evidence-artifacts";
 import { buildClauseGapReport, type ClauseGapEntry } from "@/lib/workspace-intelligence";
 import { getLawLastReviewed } from "@/lib/smb";
+import { buildEvidenceRecommendations, type EvidenceRecommendation } from "@/lib/product-intelligence";
 
 type EvidenceStatus = "covered" | "in_progress" | "gap" | "not_generated";
 
@@ -30,6 +31,13 @@ type EvidenceArtifact = {
   collectedAt: string;
   verifiedAt: string | null;
   expiresAt: string | null;
+};
+
+type QuickCaptureSuggestion = {
+  itemId: string;
+  title: string;
+  artifactType: string;
+  description: string;
 };
 
 const EVIDENCE_TYPE_MAP: Record<string, string> = {
@@ -97,6 +105,47 @@ function enrichWithEvidence(entries: ClauseGapEntry[]): EvidenceRow[] {
   });
 }
 
+function tokenize(value: string) {
+  return value.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length > 2);
+}
+
+function buildQuickCaptureSuggestion(params: {
+  note: string;
+  sourceUrl: string;
+  rows: EvidenceRow[];
+  checklistItems: Array<{
+    id: string;
+    lawSlug: string | null;
+    title: string;
+    category: string | null;
+  }>;
+}) {
+  const text = `${params.note} ${params.sourceUrl}`.trim();
+  const tokens = tokenize(text);
+  if (tokens.length === 0) return null;
+
+  let best: { itemId: string; row: EvidenceRow; score: number } | null = null;
+
+  for (const row of params.rows) {
+    const item = params.checklistItems.find((entry) => entry.lawSlug === row.lawSlug && entry.title === row.obligationTitle);
+    if (!item) continue;
+    const haystack = tokenize(`${row.lawShortTitle} ${row.obligationTitle} ${row.category} ${row.whyItMatters}`);
+    const score = tokens.reduce((sum, token) => sum + (haystack.includes(token) ? 2 : 0), 0) + (text.toLowerCase().includes((row.category || "").toLowerCase()) ? 1 : 0);
+    if (!best || score > best.score) {
+      best = { itemId: item.id, row, score };
+    }
+  }
+
+  if (!best || best.score === 0) return null;
+
+  return {
+    itemId: best.itemId,
+    title: `${best.row.lawShortTitle} — ${best.row.obligationTitle}`,
+    artifactType: best.row.evidenceType,
+    description: `${best.row.evidenceType}. ${params.note.trim() || "Evidence captured from linked source."}`,
+  } satisfies QuickCaptureSuggestion;
+}
+
 type AssessmentSummary = {
   id: string;
   name: string | null;
@@ -145,6 +194,9 @@ export default function EvidencePage() {
   const [updatingArtifactId, setUpdatingArtifactId] = useState<string | null>(null);
   const [draftEvidence, setDraftEvidence] = useState<Record<string, { title: string; artifactType: string; sourceUrl: string; description: string }>>({});
   const [artifactDrafts, setArtifactDrafts] = useState<Record<string, { status: string; expiresAt: string }>>({});
+  const [quickCaptureNote, setQuickCaptureNote] = useState("");
+  const [quickCaptureUrl, setQuickCaptureUrl] = useState("");
+  const [quickCaptureSuggestion, setQuickCaptureSuggestion] = useState<QuickCaptureSuggestion | null>(null);
 
   useEffect(() => {
     fetch("/api/assessments")
@@ -259,7 +311,33 @@ export default function EvidencePage() {
     setUpdatingArtifactId(null);
   }
 
+  function prefillRecommendation(itemId: string, recommendation: EvidenceRecommendation) {
+    setDraftEvidence((current) => ({
+      ...current,
+      [itemId]: {
+        title: recommendation.draftTitle,
+        artifactType: recommendation.artifactType,
+        sourceUrl: current[itemId]?.sourceUrl ?? "",
+        description: recommendation.draftDescription,
+      },
+    }));
+  }
+
+  function applyQuickCaptureSuggestion() {
+    if (!quickCaptureSuggestion) return;
+    setDraftEvidence((current) => ({
+      ...current,
+      [quickCaptureSuggestion.itemId]: {
+        title: quickCaptureSuggestion.title,
+        artifactType: quickCaptureSuggestion.artifactType,
+        sourceUrl: quickCaptureUrl.trim(),
+        description: quickCaptureSuggestion.description,
+      },
+    }));
+  }
+
   const gapReport = buildClauseGapReport(results, checklistItems);
+  const evidenceRecommendations = buildEvidenceRecommendations(gapReport.entries);
   const enrichedRows = enrichWithEvidence(gapReport.entries);
   const rowsWithCoverage = enrichedRows.filter((row) => {
     const item = checklistItems.find((entry) => entry.lawSlug === row.lawSlug && entry.title === row.obligationTitle);
@@ -381,6 +459,75 @@ export default function EvidencePage() {
             <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.88rem" }}>
               These obligations have no matching evidence artifact. Generate a checklist from your assessment to start tracking them.
             </p>
+          </div>
+        ) : null}
+
+        <div className="content-card" style={{ marginBottom: "1.25rem", padding: "1rem 1.1rem" }}>
+          <p style={{ margin: "0 0 0.25rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+            Quick capture
+          </p>
+          <h2 style={{ margin: 0, color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.3rem" }}>
+            Paste a proof link or note and we will suggest where it belongs
+          </h2>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1fr) minmax(0, 1.2fr)", gap: "0.75rem", marginTop: "0.85rem" }}>
+            <div style={{ display: "grid", gap: "0.35rem" }}>
+              <label htmlFor="quick-capture-url" style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--navy)" }}>Document or system link</label>
+              <input id="quick-capture-url" value={quickCaptureUrl} onChange={(event) => setQuickCaptureUrl(event.target.value)} placeholder="https://docs... or ticket link" />
+            </div>
+            <div style={{ display: "grid", gap: "0.35rem" }}>
+              <label htmlFor="quick-capture-note" style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--navy)" }}>What this proves</label>
+              <textarea id="quick-capture-note" value={quickCaptureNote} onChange={(event) => setQuickCaptureNote(event.target.value)} placeholder="Example: this policy explains human review escalation for high-risk support responses." rows={3} />
+            </div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", marginTop: "0.8rem", alignItems: "center" }}>
+            <button
+              type="button"
+              className="button"
+              disabled={!quickCaptureNote.trim() && !quickCaptureUrl.trim()}
+              onClick={() => setQuickCaptureSuggestion(buildQuickCaptureSuggestion({ note: quickCaptureNote, sourceUrl: quickCaptureUrl, rows: enrichedRows, checklistItems }))}
+            >
+              Suggest attachment
+            </button>
+            {quickCaptureSuggestion ? (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+                <span style={{ fontSize: "0.84rem", color: "var(--navy)" }}>Suggested target: {checklistItems.find((item) => item.id === quickCaptureSuggestion.itemId)?.title ?? "Checklist item"}</span>
+                <button type="button" className="button button--primary" onClick={applyQuickCaptureSuggestion}>Prefill draft</button>
+                <button type="button" className="button" onClick={() => createEvidenceArtifact(quickCaptureSuggestion.itemId)}>Create artifact</button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {evidenceRecommendations.length > 0 ? (
+          <div className="content-card" style={{ marginBottom: "1.25rem", padding: "1rem 1.1rem" }}>
+            <p style={{ margin: "0 0 0.25rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+              Audit accelerator
+            </p>
+            <h2 style={{ margin: 0, color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.3rem" }}>
+              Recommended evidence to collect next
+            </h2>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "0.8rem", marginTop: "0.9rem" }}>
+              {evidenceRecommendations.slice(0, 4).map((recommendation) => {
+                const checklistItem = checklistItems.find((item) => item.lawSlug === recommendation.lawSlug && item.title === recommendation.obligationTitle);
+                return (
+                  <div key={recommendation.id} style={{ padding: "0.9rem", borderRadius: "14px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+                    <strong style={{ color: "var(--navy)", display: "block" }}>{recommendation.draftTitle}</strong>
+                    <p style={{ margin: "0.3rem 0 0", color: "var(--muted)", fontSize: "0.86rem", lineHeight: 1.55 }}>{recommendation.whyNow}</p>
+                    <p style={{ margin: "0.35rem 0 0", color: "var(--muted)", fontSize: "0.8rem" }}>Owner: {recommendation.owner}</p>
+                    <p style={{ margin: "0.2rem 0 0", color: "var(--muted)", fontSize: "0.8rem" }}>Source: {recommendation.sourceHint}</p>
+                    {checklistItem ? (
+                      <button type="button" className="button" style={{ marginTop: "0.7rem" }} onClick={() => prefillRecommendation(checklistItem.id, recommendation)}>
+                        Prefill artifact draft
+                      </button>
+                    ) : (
+                      <Link href={selectedId ? `/assess/results/${selectedId}` : "/assess"} className="button" style={{ marginTop: "0.7rem", display: "inline-flex" }}>
+                        Track this obligation
+                      </Link>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ) : null}
 

@@ -29,6 +29,7 @@ import {
   type ClauseGapEntry,
   type WorkspaceChecklistItem,
 } from "@/lib/workspace-intelligence";
+import { buildChangeImpactBriefs, buildEvidenceRecommendations, buildRegulatoryUpdateBriefs, buildWeeklyPriorityQueue, type ChangeImpactBrief, type EvidenceRecommendation, type RegulatoryUpdateBrief, type WeeklyPriority } from "@/lib/product-intelligence";
 
 type ChecklistItem = {
   id: string;
@@ -77,6 +78,13 @@ type ChangeEntry = {
 };
 
 type AssignableMember = { id: string; name: string | null; email: string | null; role: string };
+
+type AssessmentIntelligence = {
+  weeklyPriorityQueue: WeeklyPriority[];
+  changeImpactBriefs: ChangeImpactBrief[];
+  regulatoryUpdateBriefs: RegulatoryUpdateBrief[];
+  evidenceRecommendations: EvidenceRecommendation[];
+};
 
 const STATUS_CONFIG = {
   likely_applies: { label: "Likely Applies", color: "var(--red)", bg: "rgba(230,57,70,0.1)" },
@@ -246,6 +254,7 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
   const [alerts, setAlerts] = useState<ChangeEntry[]>([]);
   const [simulationInput, setSimulationInput] = useState<AssessmentInput | null>(null);
   const [assignableMembers, setAssignableMembers] = useState<AssignableMember[]>([]);
+  const [assessmentIntelligence, setAssessmentIntelligence] = useState<AssessmentIntelligence | null>(null);
 
   useEffect(() => {
     const storedResults = sessionStorage.getItem(`assessment-${id}`);
@@ -270,12 +279,14 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
         .catch(() => null),
       fetch("/api/alerts").then((response) => response.json()).catch(() => ({ data: [] })),
       fetch("/api/organizations").then((response) => response.json()).catch(() => ({ data: [] })),
+      fetch(`/api/assessments/${id}/intelligence`).then((response) => (response.ok ? response.json() : { data: null })).catch(() => ({ data: null })),
     ])
-      .then(([data, alertsResponse, organizationsResponse]) => {
+      .then(([data, alertsResponse, organizationsResponse, intelligenceResponse]) => {
         const records = ((data?.data ?? []) as AssessmentRecord[]);
         const match = records.find((assessment) => assessment.id === id);
 
         setAlerts((alertsResponse.data ?? []) as ChangeEntry[]);
+        setAssessmentIntelligence((intelligenceResponse.data ?? null) as AssessmentIntelligence | null);
         const members = ((organizationsResponse.data ?? []) as Array<{ members: AssignableMember[] }>).flatMap((organization) => organization.members ?? []);
         setAssignableMembers(Array.from(new Map(members.map((member) => [member.id, member])).values()));
 
@@ -428,6 +439,41 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
   const recommendedControls = buildRecommendedControls(results);
   const analysis = buildComplianceAnalysis(input, results, checklistItems);
   const explicitAssumptions = buildAssessmentAssumptions(input, analysis.normalizedInput);
+  const fallbackEvidenceRecommendations = buildEvidenceRecommendations(clauseGapReport.entries);
+  const fallbackWeeklyPriorityQueue = buildWeeklyPriorityQueue({
+    actionPlanItems: actionPlan.allActions,
+    checklistItems,
+    driftTriggers,
+    evidenceRecommendations: fallbackEvidenceRecommendations,
+  });
+  const fallbackChangeImpactBriefs = buildChangeImpactBriefs({
+    alerts: alerts.map((entry) => ({
+      id: entry.id,
+      lawSlug: entry.lawSlug,
+      lawShortTitle: entry.lawShortTitle,
+      title: `${entry.lawShortTitle} update`,
+      summary: entry.summary,
+      changedAt: entry.changedAt,
+    })),
+    driftTriggers,
+    applicableResults: results.filter((result) => result.applicability_status !== "unlikely"),
+  });
+  const fallbackRegulatoryUpdateBriefs = buildRegulatoryUpdateBriefs({
+    alerts: alerts.map((entry) => ({
+      id: entry.id,
+      lawSlug: entry.lawSlug,
+      lawShortTitle: entry.lawShortTitle,
+      title: `${entry.lawShortTitle} update`,
+      summary: entry.summary,
+      changedAt: entry.changedAt,
+    })),
+    input,
+    results: results.filter((result) => result.applicability_status !== "unlikely"),
+  });
+  const evidenceRecommendations = assessmentIntelligence?.evidenceRecommendations ?? fallbackEvidenceRecommendations;
+  const weeklyPriorityQueue = assessmentIntelligence?.weeklyPriorityQueue ?? fallbackWeeklyPriorityQueue;
+  const changeImpactBriefs = assessmentIntelligence?.changeImpactBriefs ?? fallbackChangeImpactBriefs;
+  const regulatoryUpdateBriefs = assessmentIntelligence?.regulatoryUpdateBriefs ?? fallbackRegulatoryUpdateBriefs;
   const assessmentAgeDays = assessmentRecord?.createdAt
     ? Math.floor((Date.now() - new Date(assessmentRecord.createdAt).getTime()) / (1000 * 60 * 60 * 24))
     : 0;
@@ -823,6 +869,31 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
           </div>
         </div>
 
+        {weeklyPriorityQueue.length > 0 ? (
+          <div className="content-card" style={{ marginBottom: "1.25rem", padding: "1rem 1.15rem" }}>
+            <p style={{ margin: "0 0 0.25rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+              Operator queue
+            </p>
+            <h2 style={{ margin: 0, color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.3rem" }}>
+              What to do this week
+            </h2>
+            <div className="stack" style={{ marginTop: "0.9rem" }}>
+              {weeklyPriorityQueue.slice(0, 5).map((item) => (
+                <div key={item.id} style={{ padding: "0.85rem 0.95rem", borderRadius: "14px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
+                    <strong style={{ color: "var(--navy)" }}>{item.title}</strong>
+                    <span style={{ fontSize: "0.74rem", fontWeight: 700, padding: "0.18rem 0.5rem", borderRadius: "999px", background: item.urgency === "high" ? "rgba(230,57,70,0.1)" : item.urgency === "medium" ? "rgba(244,162,97,0.14)" : "rgba(42,123,98,0.12)", color: item.urgency === "high" ? "var(--red)" : item.urgency === "medium" ? "#915a1e" : "var(--green)" }}>
+                      {item.urgency}
+                    </span>
+                  </div>
+                  <p style={{ margin: "0.3rem 0 0", color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.55 }}>{item.reason}</p>
+                  <p style={{ margin: "0.35rem 0 0", color: "var(--muted)", fontSize: "0.8rem" }}>Owner: {item.owner}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {driftTriggers.length > 0 ? (
           <div className="content-card" style={{ marginBottom: "1.25rem", padding: "1rem 1.15rem" }}>
             <p style={{ margin: "0 0 0.5rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
@@ -838,6 +909,50 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
                   <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>{trigger.reason}</p>
                 </div>
               ))}
+            </div>
+          </div>
+        ) : null}
+
+        {(changeImpactBriefs.length > 0 || regulatoryUpdateBriefs.length > 0) ? (
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.1fr) minmax(320px, 1fr)", gap: "1rem", marginBottom: "1.25rem" }}>
+            <div className="content-card" style={{ padding: "1rem 1.15rem" }}>
+              <p style={{ margin: "0 0 0.25rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+                Continuous monitoring
+              </p>
+              <h2 style={{ margin: 0, color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.3rem" }}>
+                Change impact briefs
+              </h2>
+              <div className="stack" style={{ marginTop: "0.9rem" }}>
+                {changeImpactBriefs.slice(0, 4).map((brief) => (
+                  <div key={brief.id} style={{ padding: "0.85rem 0.95rem", borderRadius: "14px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+                      <strong style={{ color: "var(--navy)" }}>{brief.headline}</strong>
+                      <span style={{ fontSize: "0.72rem", fontWeight: 700, padding: "0.18rem 0.5rem", borderRadius: "999px", background: brief.severity === "high" ? "rgba(230,57,70,0.1)" : brief.severity === "medium" ? "rgba(244,162,97,0.14)" : "rgba(42,123,98,0.12)", color: brief.severity === "high" ? "var(--red)" : brief.severity === "medium" ? "#915a1e" : "var(--green)" }}>
+                        {brief.severity}
+                      </span>
+                    </div>
+                    <p style={{ margin: "0.35rem 0 0", color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.55 }}>{brief.whyItMatters}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="content-card" style={{ padding: "1rem 1.15rem" }}>
+              <p style={{ margin: "0 0 0.25rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+                Jurisdiction updates
+              </p>
+              <h2 style={{ margin: 0, color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.3rem" }}>
+                What changed and what to update
+              </h2>
+              <div className="stack" style={{ marginTop: "0.9rem" }}>
+                {regulatoryUpdateBriefs.length > 0 ? regulatoryUpdateBriefs.slice(0, 4).map((brief) => (
+                  <div key={brief.id} style={{ padding: "0.85rem 0.95rem", borderRadius: "14px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+                    <strong style={{ color: "var(--navy)", display: "block" }}>{brief.headline}</strong>
+                    <p style={{ margin: "0.3rem 0 0", color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.55 }}>{brief.whyItMatters}</p>
+                    <p style={{ margin: "0.35rem 0 0", color: "var(--navy)", fontSize: "0.82rem" }}>{brief.nextStep}</p>
+                  </div>
+                )) : <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>No tracked law updates are currently in scope for this assessment.</p>}
+              </div>
             </div>
           </div>
         ) : null}
@@ -1121,7 +1236,7 @@ export default function ResultsPage({ params }: { params: Promise<{ id: string }
           </div>
         ) : null}
 
-        {activeTab === "actions" ? <ActionPlanView actions={actionPlan.allActions} /> : null}
+        {activeTab === "actions" ? <ActionPlanView actions={actionPlan.allActions} evidenceRecommendations={evidenceRecommendations} /> : null}
         {activeTab === "compare" ? <AssessmentComparisonView deltaSummary={deltaSummary} diffEntries={assessmentDiff} /> : null}
         {activeTab === "gaps" ? <GapReportView report={clauseGapReport} /> : null}
         {activeTab === "simulate" ? (
@@ -1391,7 +1506,13 @@ function AssessmentComparisonView({
   );
 }
 
-function ActionPlanView({ actions }: { actions: ActionPlanItem[] }) {
+function getSuggestedActionDueDate(timeline: ActionPlanItem["timeline"]) {
+  if (timeline === "this_week") return "Within 7 days";
+  if (timeline === "this_month") return "Within 30 days";
+  return "Next quarter";
+}
+
+function ActionPlanView({ actions, evidenceRecommendations }: { actions: ActionPlanItem[]; evidenceRecommendations: EvidenceRecommendation[] }) {
   if (actions.length === 0) {
     return (
       <div className="content-card" style={{ textAlign: "center", padding: "2.5rem", color: "var(--muted)" }}>
@@ -1433,6 +1554,14 @@ function ActionPlanView({ actions }: { actions: ActionPlanItem[] }) {
                       </div>
                       <strong style={{ color: "var(--navy)", fontSize: "1rem" }}>{action.title}</strong>
                       <p style={{ margin: "0.35rem 0 0", color: "var(--muted)", fontSize: "0.9rem" }}>{action.whyItMatters}</p>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.6rem", marginTop: "0.8rem" }}>
+                        <ActionMeta label="Suggested owner" value={action.owner} />
+                        <ActionMeta label="Target date" value={getSuggestedActionDueDate(action.timeline)} />
+                        <ActionMeta
+                          label="Evidence to attach"
+                          value={evidenceRecommendations.find((entry) => entry.lawShortTitle === action.lawShortTitle)?.artifactType ?? "Checklist completion note or supporting policy evidence"}
+                        />
+                      </div>
                     </div>
                     {action.citation ? <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>{action.citation}</span> : null}
                   </div>
@@ -1442,6 +1571,17 @@ function ActionPlanView({ actions }: { actions: ActionPlanItem[] }) {
           </section>
         );
       })}
+    </div>
+  );
+}
+
+function ActionMeta({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ padding: "0.65rem 0.75rem", borderRadius: "12px", background: "rgba(16,32,48,0.04)", border: "1px solid rgba(16,32,48,0.07)" }}>
+      <p style={{ margin: "0 0 0.15rem", fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)" }}>
+        {label}
+      </p>
+      <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.84rem", lineHeight: 1.45 }}>{value}</p>
     </div>
   );
 }

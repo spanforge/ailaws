@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AssessmentInput } from "@/lib/rules-engine";
 import { PRODUCT_PRESETS, applyProductPreset, getProductPresetById } from "@/lib/smb";
+import { buildIntakeAssistant, type IntakeAssistant } from "@/lib/product-intelligence";
 
 const STEPS = ["Company Profile", "Product Profile", "Technical Profile", "Review"];
 
@@ -111,6 +112,7 @@ export default function AssessPage() {
   const [form, setForm] = useState<AssessmentInput>(BLANK);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [intakeAssistant, setIntakeAssistant] = useState<IntakeAssistant>(buildIntakeAssistant(BLANK));
 
   useEffect(() => {
     try {
@@ -124,6 +126,41 @@ export default function AssessPage() {
     }
   }, []);
 
+  useEffect(() => {
+    const baseline = buildIntakeAssistant(form);
+    setIntakeAssistant(baseline);
+
+    if (step !== 0 || !form.system_description?.trim()) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const response = await fetch("/api/intelligence/intake", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = (await response.json()) as IntakeAssistant;
+        setIntakeAssistant(payload);
+      } catch {
+        // Keep deterministic fallback when the assistant endpoint is unavailable.
+      }
+    }, 350);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [form, step]);
+
 function toggleMulti(field: "target_markets" | "use_cases" | "data_types", value: string) {
     setForm((prev) => {
       const current = prev[field] as string[];
@@ -136,6 +173,58 @@ function toggleMulti(field: "target_markets" | "use_cases" | "data_types", value
 
   function set(field: keyof AssessmentInput, value: unknown) {
     setForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function applyIntakeSuggestions() {
+    setForm((prev) => ({
+      ...prev,
+      ...intakeAssistant.suggestedPatch,
+      use_cases: intakeAssistant.suggestedPatch.use_cases ?? prev.use_cases,
+      data_types: intakeAssistant.suggestedPatch.data_types ?? prev.data_types,
+      target_markets: intakeAssistant.suggestedPatch.target_markets ?? prev.target_markets,
+    }));
+  }
+
+  async function runQuickStart(systemDescription: string) {
+    const seededInput: AssessmentInput = {
+      ...BLANK,
+      system_description: systemDescription.trim(),
+      uses_ai: true,
+    };
+
+    const fallback = buildIntakeAssistant(seededInput);
+
+    try {
+      const response = await fetch("/api/intelligence/intake", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(seededInput),
+      });
+
+      const assistant = response.ok ? ((await response.json()) as IntakeAssistant) : fallback;
+      const nextMarkets = assistant.suggestedPatch.target_markets ?? fallback.suggestedPatch.target_markets ?? [];
+      const nextUseCases = assistant.suggestedPatch.use_cases ?? fallback.suggestedPatch.use_cases ?? [];
+
+      setForm({
+        ...seededInput,
+        ...assistant.suggestedPatch,
+        target_markets: nextMarkets,
+        use_cases: nextUseCases,
+        product_type: nextUseCases.includes("content_generation") || nextUseCases.includes("general_purpose") ? "generative_ai" : "saas",
+        hq_region: nextMarkets[0] ?? "",
+      });
+      setStep(0);
+    } catch {
+      setForm({
+        ...seededInput,
+        ...fallback.suggestedPatch,
+        target_markets: fallback.suggestedPatch.target_markets ?? [],
+        use_cases: fallback.suggestedPatch.use_cases ?? [],
+        product_type: (fallback.suggestedPatch.use_cases ?? []).includes("content_generation") ? "generative_ai" : "saas",
+        hq_region: fallback.suggestedPatch.target_markets?.[0] ?? "",
+      });
+      setStep(0);
+    }
   }
 
   async function submit() {
@@ -186,10 +275,13 @@ function toggleMulti(field: "target_markets" | "use_cases" | "data_types", value
             letterSpacing: "-0.03em",
           }}
         >
-          Which AI laws apply to your product?
+          Describe your AI product once and leave with a concrete compliance work plan
         </h1>
-        <p style={{ color: "var(--muted)", margin: "0 0 2rem" }}>
-          Answer {STEPS.length} short sections. We will run a rules-based analysis and generate an action plan you can share today.
+        <p style={{ color: "var(--muted)", margin: "0 0 0.9rem", lineHeight: 1.6 }}>
+          Answer {STEPS.length} short sections. We will run a rules-based analysis and turn the result into applicable laws, owner-ready actions, and evidence guidance you can use today.
+        </p>
+        <p style={{ color: "var(--muted)", margin: "0 0 2rem", fontSize: "0.92rem", lineHeight: 1.55 }}>
+          Best for founders, product leads, and compliance operators who need clarity before launch, procurement review, customer diligence, or internal signoff.
         </p>
 
         {step === -1 ? (
@@ -202,6 +294,7 @@ function toggleMulti(field: "target_markets" | "use_cases" | "data_types", value
               setForm(BLANK);
               setStep(0);
             }}
+            onQuickStart={runQuickStart}
           />
         ) : (
           <>
@@ -224,7 +317,7 @@ function toggleMulti(field: "target_markets" | "use_cases" | "data_types", value
             </div>
 
             <div className="content-card" style={{ marginTop: "1.5rem" }} aria-busy={submitting}>
-              {step === 0 && <StepCompany form={form} set={set} toggleMulti={toggleMulti} />}
+              {step === 0 && <StepCompany form={form} set={set} toggleMulti={toggleMulti} assistant={intakeAssistant} onApplyAssistant={applyIntakeSuggestions} />}
               {step === 1 && <StepProduct form={form} set={set} toggleMulti={toggleMulti} />}
               {step === 2 && <StepTechnical form={form} set={set} toggleMulti={toggleMulti} />}
               {step === 3 && <StepReview form={form} />}
@@ -336,18 +429,54 @@ function PresetValue({ label }: { label: string }) {
 function PresetPicker({
   onSelect,
   onBlank,
+  onQuickStart,
 }: {
   onSelect: (presetId: string) => void;
   onBlank: () => void;
+  onQuickStart: (systemDescription: string) => Promise<void>;
 }) {
+  const [quickStartDescription, setQuickStartDescription] = useState("");
+  const [starting, setStarting] = useState(false);
+
   return (
     <div className="content-card">
       <h2 style={{ margin: "0 0 0.75rem", fontFamily: "var(--font-heading)", fontSize: "1.5rem" }}>
-        Start from a preset
+        Pick the fastest path into your first result
       </h2>
       <p style={{ color: "var(--muted)", margin: "0 0 1.25rem" }}>
-        Choose the closest product shape to prefill the wizard, or start from a blank assessment.
+        Choose the closest product shape, describe the product in plain English, or start blank if you already know exactly how you want to profile the system.
       </p>
+      <div style={{ marginBottom: "1.25rem", padding: "1rem", borderRadius: "14px", background: "rgba(37,99,235,0.05)", border: "1px solid rgba(37,99,235,0.14)" }}>
+        <p style={{ margin: "0 0 0.25rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+          Fastest path
+        </p>
+        <h3 style={{ margin: 0, color: "var(--navy)", fontFamily: "var(--font-heading)", fontSize: "1.2rem" }}>
+          Describe your product in plain English
+        </h3>
+        <p style={{ margin: "0.35rem 0 0.8rem", color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.55 }}>
+          We will prefill markets, likely use cases, data signals, and the first-pass risk setup so you can move straight into the assessment.
+        </p>
+        <textarea
+          value={quickStartDescription}
+          onChange={(event) => setQuickStartDescription(event.target.value)}
+          placeholder="Example: We built an AI support assistant for Shopify stores that answers customer questions, summarizes tickets, and uses EU and US customer data."
+          rows={4}
+        />
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "0.75rem" }}>
+          <button
+            type="button"
+            className="button button--primary"
+            disabled={!quickStartDescription.trim() || starting}
+            onClick={async () => {
+              setStarting(true);
+              await onQuickStart(quickStartDescription);
+              setStarting(false);
+            }}
+          >
+            {starting ? "Setting up..." : "Quick-start assessment"}
+          </button>
+        </div>
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.85rem" }}>
         {PRODUCT_PRESETS.map((preset) => (
           <button
@@ -402,10 +531,14 @@ function StepCompany({
   form,
   set,
   toggleMulti,
+  assistant,
+  onApplyAssistant,
 }: {
   form: AssessmentInput;
   set: (field: keyof AssessmentInput, value: unknown) => void;
   toggleMulti: (field: "target_markets" | "use_cases" | "data_types", value: string) => void;
+  assistant: IntakeAssistant;
+  onApplyAssistant: () => void;
 }) {
   return (
     <div>
@@ -424,6 +557,45 @@ function StepCompany({
         <p style={{ margin: "0.45rem 0 0", color: "var(--muted)", fontSize: "0.84rem", lineHeight: 1.55 }}>
           This drives the classification layer. We use it to infer likely use cases, risk posture, and missing compliance signals.
         </p>
+      </div>
+      <div className="content-card" style={{ marginBottom: "1rem", padding: "0.95rem 1rem", background: "rgba(37,99,235,0.05)", border: "1px solid rgba(37,99,235,0.14)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", alignItems: "flex-start" }}>
+          <div style={{ flex: 1 }}>
+            <p style={{ margin: "0 0 0.25rem", fontSize: "0.76rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
+              Intake assistant · {assistant.confidence} confidence
+            </p>
+            <p style={{ margin: 0, color: "var(--navy)", fontSize: "0.9rem", lineHeight: 1.55 }}>{assistant.summary}</p>
+          </div>
+          <button type="button" className="button" onClick={onApplyAssistant}>
+            Apply inferred fields
+          </button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.75rem", marginTop: "0.85rem" }}>
+          <div>
+            <p style={{ margin: "0 0 0.3rem", fontSize: "0.76rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)" }}>Likely use cases</p>
+            <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+              {assistant.inferredUseCases.length > 0 ? assistant.inferredUseCases.map((value) => <PresetValue key={value} label={value.replace(/_/g, " ")} />) : <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>Need more detail</span>}
+            </div>
+          </div>
+          <div>
+            <p style={{ margin: "0 0 0.3rem", fontSize: "0.76rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)" }}>Detected data signals</p>
+            <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+              {assistant.inferredDataTypes.length > 0 ? assistant.inferredDataTypes.map((value) => <PresetValue key={value} label={value.replace(/_/g, " ")} />) : <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>No strong signal yet</span>}
+            </div>
+          </div>
+          <div>
+            <p style={{ margin: "0 0 0.3rem", fontSize: "0.76rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)" }}>Missing facts</p>
+            {assistant.missingFacts.length > 0 ? (
+              <ul style={{ margin: 0, paddingLeft: "1rem", color: "var(--navy)", fontSize: "0.84rem", lineHeight: 1.55 }}>
+                {assistant.missingFacts.slice(0, 3).map((fact) => (
+                  <li key={fact}>{fact}</li>
+                ))}
+              </ul>
+            ) : (
+              <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.85rem" }}>Enough detail to run a strong first-pass analysis.</p>
+            )}
+          </div>
+        </div>
       </div>
       <div className="form-grid">
         <div className="field">

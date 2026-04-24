@@ -59,6 +59,13 @@ COMPLIANCE_SLACK_WEBHOOK_URL=  # optional Slack webhook for high-severity compli
 - [docs/security.md](docs/security.md) — Security model
 - [docs/testing.md](docs/testing.md) — Testing guide
 - [docs/content-ops.md](docs/content-ops.md) — Adding/updating law content
+- [docs/personas.md](docs/personas.md) — Who should use Compass and why
+- [docs/user-journeys.md](docs/user-journeys.md) — End-to-end user journeys and value flow
+- [docs/how-compass-works.md](docs/how-compass-works.md) — Customer-facing explanation of the workflow and value
+- [docs/demo-script.md](docs/demo-script.md) — Live demo and launch walkthrough script
+- [docs/launch-video-script.md](docs/launch-video-script.md) — Short spoken script for launch videos and walkthroughs
+- [docs/case-study-ai-support-saas.md](docs/case-study-ai-support-saas.md) — Example journey for an AI support SaaS team
+- [docs/case-study-hr-screening.md](docs/case-study-hr-screening.md) — Example journey for an AI hiring workflow team
 - [docs/runbooks/database-restore.md](docs/runbooks/database-restore.md) — Database backup & restore
 - [docs/runbooks/incident-response.md](docs/runbooks/incident-response.md) — Incident response
 

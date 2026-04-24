@@ -4,15 +4,18 @@ import { runRulesEngine, type AssessmentInput } from "@/lib/rules-engine";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { captureException } from "@/lib/monitoring";
-import { buildRateLimitHeaders, getRequestFingerprint, takeRateLimit } from "@/lib/rate-limit";
+import { buildRateLimitHeaders, takeRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
-  const userId = session?.user?.id ?? null;
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const userId = session.user.id;
   const rateLimit = takeRateLimit({
-    key: `assessments:create:${userId ?? getRequestFingerprint(req)}`,
+    key: `assessments:create:${userId}`,
     limit: 20,
     windowMs: 10 * 60 * 1000,
   });
@@ -79,7 +82,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     await captureException(error, {
       tags: { surface: "assessments", action: "create" },
-      extra: { userId: userId ?? "anonymous" },
+      extra: { userId },
     });
     return NextResponse.json({ error: "Unable to run assessment right now" }, { status: 500 });
   }

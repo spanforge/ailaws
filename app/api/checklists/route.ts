@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getLawBySlug } from "@/lib/lexforge-data";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/auth";
 
 export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { assessment_id } = (await req.json()) as { assessment_id: string };
 
   const assessment = await prisma.assessment.findUnique({
@@ -45,6 +51,11 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { searchParams } = req.nextUrl;
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });

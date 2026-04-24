@@ -9,18 +9,15 @@ type Props = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, { params }: Props) {
   const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { id } = await params;
 
   const assessment = await prisma.assessment.findFirst({
     where: {
       id,
-      ...(session?.user?.id
-        ? {
-            OR: [{ userId: session.user.id }, { userId: null }],
-          }
-        : {
-            userId: null,
-          }),
+      userId: session.user.id,
     },
     include: {
       checklists: {

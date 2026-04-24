@@ -20,9 +20,20 @@ export function getAuthBaseUrl() {
   return process.env.NEXTAUTH_URL ?? "http://localhost:3000";
 }
 
-export function buildEmailVerificationUrl(token: string) {
+export function normalizeCallbackUrl(callbackUrl?: string | null) {
+  if (!callbackUrl) return null;
+  if (!callbackUrl.startsWith("/")) return null;
+  if (callbackUrl.startsWith("//")) return null;
+  return callbackUrl;
+}
+
+export function buildEmailVerificationUrl(token: string, callbackUrl?: string | null) {
   const verifyUrl = new URL("/api/auth/verify-email", getAuthBaseUrl());
   verifyUrl.searchParams.set("token", token);
+  const safeCallbackUrl = normalizeCallbackUrl(callbackUrl);
+  if (safeCallbackUrl) {
+    verifyUrl.searchParams.set("callbackUrl", safeCallbackUrl);
+  }
   return verifyUrl.toString();
 }
 

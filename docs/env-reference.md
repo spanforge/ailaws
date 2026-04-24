@@ -21,6 +21,7 @@ All variables should be set in `.env.local` (development) or via your hosting pl
 | `RESEND_API_KEY` | API key used to deliver email verification messages for credential signups. | `re_xxxxxxxxx` |
 | `AUTH_VERIFICATION_FROM_EMAIL` | Verified sender address used for verification emails. | `Spanforge Compass <auth@yourdomain.com>` |
 | `AUTH_ALERTS_FROM_EMAIL` | Optional sender address for regulatory watchlist emails. Falls back to `AUTH_VERIFICATION_FROM_EMAIL` when omitted. | `Spanforge Compass Alerts <alerts@yourdomain.com>` |
+| `AUTH_WORKSPACE_FROM_EMAIL` | Optional sender address for workspace creation and invite emails. Falls back to `AUTH_VERIFICATION_FROM_EMAIL` when omitted. | `Spanforge Compass Workspace <workspace@yourdomain.com>` |
 | `NEXT_PUBLIC_SENTRY_DSN` | Sentry Data Source Name for client-side error capture. | `https://xxx@sentry.io/12345` |
 | `SENTRY_DSN` | Sentry DSN for server-side error capture (can match above). | `https://xxx@sentry.io/12345` |
 | `SENTRY_AUTH_TOKEN` | Sentry auth token for source-map upload during build. | Obtain from Sentry project settings |
@@ -59,6 +60,8 @@ In development, if `RESEND_API_KEY` and `AUTH_VERIFICATION_FROM_EMAIL` are not s
 In production, configure both values before enabling credential signup.
 
 Regulatory watchlist emails also use `RESEND_API_KEY`. If `AUTH_ALERTS_FROM_EMAIL` is not set, watchlist delivery uses `AUTH_VERIFICATION_FROM_EMAIL`.
+
+Workspace creation confirmations and workspace invite emails also use `RESEND_API_KEY`. If `AUTH_WORKSPACE_FROM_EMAIL` is not set, workspace delivery uses `AUTH_VERIFICATION_FROM_EMAIL`.
 
 ---
 

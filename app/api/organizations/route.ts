@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { captureException } from "@/lib/monitoring";
 import { prisma } from "@/lib/prisma";
+import { sendWorkspaceCreatedEmail } from "@/lib/workspace-email";
 
 export async function GET() {
   const session = await auth();
@@ -77,6 +79,22 @@ export async function POST(req: NextRequest) {
       },
     },
   });
+
+  if (session.user.email) {
+    try {
+      await sendWorkspaceCreatedEmail({
+        email: session.user.email,
+        recipientName: session.user.name,
+        workspaceName: organization.name,
+        workspaceSlug: organization.slug,
+      });
+    } catch (error) {
+      await captureException(error, {
+        tags: { surface: "workspace", action: "send-created-email" },
+        extra: { organizationId: organization.id, userId: session.user.id },
+      });
+    }
+  }
 
   return NextResponse.json({ data: organization }, { status: 201 });
 }

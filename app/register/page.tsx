@@ -3,13 +3,22 @@
 import { useEffect, useState, FormEvent } from "react";
 import { getProviders, signIn } from "next-auth/react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 type ProviderSummary = {
   id: string;
   name: string;
 };
 
+function getSafeCallbackUrl(value: string | null) {
+  if (!value) return "/dashboard";
+  if (!value.startsWith("/")) return "/dashboard";
+  if (value.startsWith("//")) return "/dashboard";
+  return value;
+}
+
 export default function RegisterPage() {
+  const searchParams = useSearchParams();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,6 +27,7 @@ export default function RegisterPage() {
   const [verifyUrl, setVerifyUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [providers, setProviders] = useState<ProviderSummary[]>([]);
+  const callbackUrl = getSafeCallbackUrl(searchParams.get("callbackUrl"));
 
   useEffect(() => {
     getProviders().then((available) => {
@@ -38,7 +48,7 @@ export default function RegisterPage() {
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify({ name, email, password, callbackUrl }),
     });
 
     if (!res.ok) {
@@ -74,7 +84,7 @@ export default function RegisterPage() {
                 key={provider.id}
                 type="button"
                 className="button auth-provider-button"
-                onClick={() => signIn(provider.id, { callbackUrl: "/dashboard" })}
+                onClick={() => signIn(provider.id, { callbackUrl })}
               >
                 Continue with {provider.name}
               </button>
@@ -140,7 +150,11 @@ export default function RegisterPage() {
 
         <p className="auth-switch">
           Already have an account?{" "}
-          <Link href={notice ? "/login?registered=1" : "/login"}>Sign in</Link>
+          <Link href={notice
+            ? `/login?registered=1&callbackUrl=${encodeURIComponent(callbackUrl)}`
+            : (callbackUrl === "/dashboard" ? "/login" : `/login?callbackUrl=${encodeURIComponent(callbackUrl)}`)}>
+            Sign in
+          </Link>
         </p>
       </div>
     </div>

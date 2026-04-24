@@ -23,8 +23,37 @@ npm start               # starts production server on port 3000
 3. Set environment variables in the Vercel project settings (see `docs/env-reference.md`).
 4. Set the **Build Command** to: `npm run db:migrate && npm run build`
 5. Set the **Output Directory** to: `.next`
+6. Enable **Web Analytics** and **Speed Insights** in the Vercel project dashboard if you want Vercel Insights data collected in production.
 
 Vercel will run migrations automatically before each deployment.
+
+### URL behavior on Vercel
+
+The app now resolves its public site URL in this order:
+
+1. `NEXTAUTH_URL`
+2. `VERCEL_PROJECT_PRODUCTION_URL`
+3. `VERCEL_URL`
+4. `http://localhost:3000`
+
+For production, you should still set `NEXTAUTH_URL` explicitly to your real public domain.
+
+Example:
+
+```env
+NEXTAUTH_URL=https://compass.yourdomain.com
+```
+
+This ensures email verification links, workspace invite links, Open Graph metadata, and auth callbacks all point at the correct production hostname instead of a preview URL.
+
+### Vercel Insights
+
+The app includes:
+
+- `@vercel/analytics`
+- `@vercel/speed-insights`
+
+These are mounted in the root layout, so once the Vercel dashboard features are enabled, page analytics and performance insights will start flowing without additional code changes.
 
 ## Docker
 
@@ -74,6 +103,7 @@ Migrations are idempotent — safe to run `npx prisma migrate deploy` on every d
 - [ ] Run `npx prisma db seed` to load law data
 - [ ] Run `npm run make-admin -- --email admin@example.com` to create the first admin user
 - [ ] Optionally set `NEXT_PUBLIC_SENTRY_DSN` for error tracking
+- [ ] Enable Vercel Web Analytics and Speed Insights in the Vercel dashboard
 
 ## Promoting a User to Admin
 

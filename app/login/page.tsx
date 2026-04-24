@@ -10,6 +10,13 @@ type ProviderSummary = {
   name: string;
 };
 
+function getSafeCallbackUrl(value: string | null) {
+  if (!value) return "/dashboard";
+  if (!value.startsWith("/")) return "/dashboard";
+  if (value.startsWith("//")) return "/dashboard";
+  return value;
+}
+
 export default function LoginPage() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
@@ -55,6 +62,7 @@ export default function LoginPage() {
   }, [searchParams]);
 
   const canResend = useMemo(() => email.trim().length > 0, [email]);
+  const callbackUrl = getSafeCallbackUrl(searchParams.get("callbackUrl"));
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -66,13 +74,14 @@ export default function LoginPage() {
       email,
       password,
       redirect: false,
+      callbackUrl,
     });
 
     setLoading(false);
     if (result?.error) {
       setError("Invalid email or password. If you recently registered, verify your email before signing in.");
     } else {
-      window.location.href = "/dashboard";
+      window.location.href = callbackUrl;
     }
   }
 
@@ -86,7 +95,7 @@ export default function LoginPage() {
     const response = await fetch("/api/auth/resend-verification", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, callbackUrl }),
     });
     const data = await response.json();
 
@@ -119,7 +128,7 @@ export default function LoginPage() {
                 key={provider.id}
                 type="button"
                 className="button auth-provider-button"
-                onClick={() => signIn(provider.id, { callbackUrl: "/dashboard" })}
+                onClick={() => signIn(provider.id, { callbackUrl })}
               >
                 Continue with {provider.name}
               </button>
@@ -170,7 +179,9 @@ export default function LoginPage() {
 
         <p className="auth-switch">
           Don&apos;t have an account?{" "}
-          <Link href="/register">Create one free</Link>
+          <Link href={callbackUrl === "/dashboard" ? "/register" : `/register?callbackUrl=${encodeURIComponent(callbackUrl)}`}>
+            Create one free
+          </Link>
         </p>
       </div>
     </div>

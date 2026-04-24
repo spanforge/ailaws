@@ -5,17 +5,11 @@ import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import type { ReactNode } from "react";
 
-const navLinks = [
+const primaryNavLinks = [
   { href: "/explore", label: "Laws" },
   { href: "/assess", label: "Assess" },
   { href: "/evidence", label: "Evidence" },
   { href: "/templates", label: "Templates" },
-  { href: "/compare", label: "Compare" },
-  { href: "/methodology", label: "Methodology" },
-  { href: "/guides", label: "Guides" },
-  { href: "/map", label: "Map" },
-  { href: "/timeline", label: "Timeline" },
-  { href: "/penalties", label: "Penalties" },
 ];
 
 export function SiteShell({ children }: { children: ReactNode }) {
@@ -34,10 +28,17 @@ export function SiteShell({ children }: { children: ReactNode }) {
         <div className="shell site-header__inner">
           <Link href="/" className="brand">
             <span className="brand__eyebrow">AI Compliance Evidence Workspace</span>
-            <span className="brand__name">Spanforge Compass</span>
+            <span className="brand__name-row">
+              <span className="brand__name">
+                <span className="brand__spanforge">Spanforge</span>{" "}
+                <span className="brand__compass">Compass</span>
+              </span>
+              <span className="brand__badge">Free Beta</span>
+            </span>
           </Link>
-          <nav className="nav" aria-label="Primary">
-            {navLinks.map((item) => {
+          <div className="header-actions">
+            <nav className="nav" aria-label="Primary">
+            {primaryNavLinks.map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
               return (
                 <Link
@@ -49,9 +50,10 @@ export function SiteShell({ children }: { children: ReactNode }) {
                 </Link>
               );
             })}
+            </nav>
             {session ? (
               <>
-                <Link href="/dashboard" aria-current={pathname === "/dashboard" ? "page" : undefined}>Dashboard</Link>
+                <Link href="/dashboard" className="header-link" aria-current={pathname === "/dashboard" ? "page" : undefined}>Dashboard</Link>
                 <button
                   onClick={() => signOut({ callbackUrl: "/" })}
                   className="nav-btn"
@@ -61,10 +63,10 @@ export function SiteShell({ children }: { children: ReactNode }) {
               </>
             ) : (
               <>
-                <Link href="/login" aria-current={pathname === "/login" ? "page" : undefined}>Sign in</Link>
+                <Link href="/login" className="header-link header-link--primary" aria-current={pathname === "/login" ? "page" : undefined}>Sign in</Link>
               </>
             )}
-          </nav>
+          </div>
         </div>
       </header>
 
@@ -75,7 +77,10 @@ export function SiteShell({ children }: { children: ReactNode }) {
           <div>
             <Link href="/" className="brand">
               <span className="brand__eyebrow">AI Compliance Evidence Workspace</span>
-              <span className="brand__name">Spanforge Compass</span>
+              <span className="brand__name">
+                <span className="brand__spanforge">Spanforge</span>{" "}
+                <span className="brand__compass">Compass</span>
+              </span>
             </Link>
             <p className="footer-copy" style={{ marginTop: "0.65rem" }}>
               Assess AI law exposure, track obligations, and export evidence packages.

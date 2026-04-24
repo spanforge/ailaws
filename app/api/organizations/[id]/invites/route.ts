@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { captureException } from "@/lib/monitoring";
 import { prisma } from "@/lib/prisma";
+import { buildWorkspaceInviteUrl, sendWorkspaceInviteEmail } from "@/lib/workspace-email";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -21,6 +23,15 @@ export async function POST(req: NextRequest, { params }: Props) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const organization = await prisma.organization.findUnique({
+    where: { id },
+    select: { id: true, name: true, slug: true },
+  });
+
+  if (!organization) {
+    return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
+  }
+
   const body = await req.json() as { email?: string };
   const email = body.email?.trim().toLowerCase();
   if (!email) return NextResponse.json({ error: "Email required" }, { status: 400 });
@@ -35,6 +46,21 @@ export async function POST(req: NextRequest, { params }: Props) {
   });
 
   if (duplicateInvite) {
+    try {
+      await sendWorkspaceInviteEmail({
+        email,
+        inviterName: session.user.name,
+        workspaceName: organization.name,
+        acceptUrl: buildWorkspaceInviteUrl(duplicateInvite.token),
+        expiresAt: duplicateInvite.expiresAt,
+      });
+    } catch (error) {
+      await captureException(error, {
+        tags: { surface: "workspace", action: "send-invite-email" },
+        extra: { organizationId: organization.id, inviteId: duplicateInvite.id, email },
+      });
+    }
+
     return NextResponse.json({ data: duplicateInvite }, { status: 200 });
   }
 
@@ -48,6 +74,21 @@ export async function POST(req: NextRequest, { params }: Props) {
       expiresAt,
     },
   });
+
+  try {
+    await sendWorkspaceInviteEmail({
+      email,
+      inviterName: session.user.name,
+      workspaceName: organization.name,
+      acceptUrl: buildWorkspaceInviteUrl(invite.token),
+      expiresAt: invite.expiresAt,
+    });
+  } catch (error) {
+    await captureException(error, {
+      tags: { surface: "workspace", action: "send-invite-email" },
+      extra: { organizationId: organization.id, inviteId: invite.id, email },
+    });
+  }
 
   return NextResponse.json({ data: invite }, { status: 201 });
 }

@@ -7,6 +7,7 @@ import {
   buildEmailVerificationUrl,
   createEmailVerificationToken,
   isEmailVerificationDeliveryConfigured,
+  normalizeCallbackUrl,
   sendVerificationEmail,
 } from "@/lib/auth-verification";
 
@@ -41,10 +42,12 @@ export async function POST(req: NextRequest) {
     email?: string;
     password?: string;
     name?: string;
+    callbackUrl?: string;
   };
 
   const normalizedEmail = email?.trim().toLowerCase() ?? "";
   const normalizedName = name?.trim() || null;
+  const safeCallbackUrl = normalizeCallbackUrl((body as { callbackUrl?: string }).callbackUrl);
 
   if (!normalizedEmail || !password) {
     return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
@@ -86,7 +89,7 @@ export async function POST(req: NextRequest) {
       }
 
       const verification = createEmailVerificationToken();
-      const verifyUrl = buildEmailVerificationUrl(verification.token);
+      const verifyUrl = buildEmailVerificationUrl(verification.token, safeCallbackUrl);
 
       await prisma.user.update({
         where: { id: existing.id },
@@ -118,7 +121,7 @@ export async function POST(req: NextRequest) {
 
     const hashed = await bcrypt.hash(password, 12);
     const verification = createEmailVerificationToken();
-    const verifyUrl = buildEmailVerificationUrl(verification.token);
+    const verifyUrl = buildEmailVerificationUrl(verification.token, safeCallbackUrl);
     const user = await prisma.user.create({
       data: {
         email: normalizedEmail,

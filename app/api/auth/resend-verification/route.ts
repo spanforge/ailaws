@@ -5,11 +5,12 @@ import {
   buildEmailVerificationUrl,
   createEmailVerificationToken,
   isEmailVerificationDeliveryConfigured,
+  normalizeCallbackUrl,
   sendVerificationEmail,
 } from "@/lib/auth-verification";
 
 export async function POST(request: NextRequest) {
-  let body: { email?: string };
+  let body: { email?: string; callbackUrl?: string };
 
   try {
     body = await request.json();
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  const verifyUrl = buildEmailVerificationUrl(verification.token);
+  const verifyUrl = buildEmailVerificationUrl(verification.token, normalizeCallbackUrl(body.callbackUrl));
 
   try {
     const delivery = await sendVerificationEmail({

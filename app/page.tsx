@@ -5,27 +5,27 @@ import { TEMPLATE_LIBRARY } from "@/lib/smb";
 export const metadata = {
   title: "AI Law Evidence-Readiness Workspace for B2B SaaS Teams - Spanforge Compass",
   description:
-    "Compass helps B2B SaaS teams shipping AI into enterprise procurement determine applicability, produce exportable evidence, and reassess as regulation changes.",
+    "Compass is a free beta workspace for B2B SaaS teams shipping AI into enterprise procurement to assess applicability, produce evidence, and stay current as regulation changes.",
 };
 
 const coreJobs = [
   {
     icon: "📋",
     number: "01",
-    title: "Pre-launch applicability assessment",
-    body: "Determine exactly which AI laws apply to your product before a customer, counsel, or regulator asks. Leave with a prioritized action list, not a reading list.",
+    title: "Run your first applicability check fast",
+    body: "Answer the workflow once and get a concrete law map, top obligations, and next actions before an enterprise buyer or counsel asks for proof.",
   },
   {
     icon: "🤝",
     number: "02",
-    title: "Customer and procurement support",
-    body: "Export a regulatory applicability memo, evidence checklist, and trust packet your team can hand directly to enterprise security reviews and vendor questionnaires.",
+    title: "Turn answers into reusable evidence",
+    body: "Export a regulatory applicability memo, evidence checklist, and trust packet your team can reuse in procurement reviews, questionnaires, and internal signoff.",
   },
   {
     icon: "🔄",
     number: "03",
-    title: "Change-triggered reassessment",
-    body: "Track which laws are changing, see which conclusions are now stale, and run a targeted reassessment before a new launch cycle or audit window.",
+    title: "Come back when laws or products change",
+    body: "Track what changed, see which conclusions are stale, and rerun targeted reassessments instead of rebuilding the whole analysis every time.",
   },
 ];
 
@@ -56,6 +56,9 @@ export default function HomePage() {
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "0.65rem", flexWrap: "wrap", marginBottom: "0.6rem" }}>
               <p className="eyebrow" style={{ margin: 0 }}>Legal intelligence for AI teams</p>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.2rem 0.6rem", borderRadius: "999px", background: "rgba(42,123,98,0.12)", color: "var(--green)", fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.04em" }}>
+                Free beta
+              </span>
               <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.2rem 0.6rem", borderRadius: "999px", background: "var(--primary-light)", color: "var(--primary)", fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.04em" }}>
                 Part of SpanForge
               </span>
@@ -71,31 +74,34 @@ export default function HomePage() {
                 maxWidth: "16ch",
               }}
             >
-              The evidence-readiness workspace for AI launches
+              Find which AI laws apply and leave with evidence your team can use
             </h1>
             <p style={{ color: "var(--muted)", fontSize: "1.05rem", maxWidth: "56ch", lineHeight: 1.6, margin: 0 }}>
-              Compass helps B2B SaaS teams shipping AI into enterprise procurement understand which laws apply, produce exportable evidence, and stay current as regulation changes — without starting from a blank spreadsheet.
+              Compass is a free beta for B2B teams shipping AI into enterprise procurement. Run an assessment, save the laws that matter, export evidence, and come back when regulation or product scope changes.
             </p>
             <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginTop: "1.25rem" }}>
               <Link href="/assess" className="button button--primary" style={{ fontSize: "0.95rem", padding: "0.75rem 1.2rem" }}>
-                Start assessment →
+                Run free assessment →
               </Link>
-              <Link href="/methodology" className="button" style={{ fontSize: "0.95rem", padding: "0.75rem 1.2rem" }}>
-                View methodology
+              <Link href="/explore" className="button" style={{ fontSize: "0.95rem", padding: "0.75rem 1.2rem" }}>
+                Explore tracked laws
               </Link>
             </div>
+            <p style={{ margin: "0.8rem 0 0", color: "var(--muted)", fontSize: "0.84rem", lineHeight: 1.5 }}>
+              Best for founders, compliance owners, and product teams preparing for enterprise reviews or launch signoff.
+            </p>
           </div>
           <div className="content-card" style={{ padding: "1.2rem 1.25rem", alignSelf: "stretch" }}>
             <p style={{ margin: "0 0 0.35rem", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)" }}>
-              Built for one buyer
+              First-session outcome
             </p>
             <p style={{ margin: "0 0 0.85rem", color: "var(--navy)", fontSize: "0.92rem", fontWeight: 600, lineHeight: 1.45 }}>
-              B2B SaaS teams shipping AI into enterprise procurement and regulated customer environments.
+              In one pass, a serious user should know which laws to care about, what evidence to prepare, and what to revisit later.
             </p>
             <div className="stack">
-              <SnapshotItem title="Assess" body="Determine which AI laws apply before launch or a customer questionnaire arrives." />
-              <SnapshotItem title="Prove" body="Export evidence packages with sources, clause coverage, and attestation metadata." />
-              <SnapshotItem title="Stay current" body="Reassess when tracked laws change — drift detection is built into every report." />
+              <SnapshotItem title="1. Assess" body="Determine which AI laws apply before launch or a customer questionnaire arrives." />
+              <SnapshotItem title="2. Save and export" body="Capture the laws you care about and produce evidence packages with sources and checklist state." />
+              <SnapshotItem title="3. Reassess later" body="Come back when tracked laws change or your product scope shifts." />
             </div>
           </div>
         </section>
@@ -167,31 +173,31 @@ export default function HomePage() {
           <p className="kicker" style={{ color: "var(--amber)", marginBottom: "0.55rem" }}>03 &middot; Get started</p>
           <div className="section-heading">
             <h2 style={{ margin: 0, fontFamily: "var(--font-heading)", color: "var(--navy)", fontSize: "1.45rem" }}>
-              Start with applicability, leave with evidence
+              The adoption path is simple
             </h2>
           </div>
           <div className="card-grid">
             <ActionCard
               icon="📋"
-              title="Run the assessment"
-              body="Answer a short wizard. Get an executive verdict, top obligations, owner hints, and a prioritized action plan — all in one pass."
+              title="Run the first assessment"
+              body="Answer a short workflow and get an executive verdict, top obligations, and a prioritized action plan in one pass."
               href="/assess"
-              cta="Start assessment"
+              cta="Run assessment"
               primary
             />
             <ActionCard
               icon="📄"
-              title="Export for procurement"
-              body="AI governance summary, regulatory applicability memo, evidence checklist, and customer-facing trust packet — ready to hand over."
+              title="Export something useful"
+              body="Generate an AI governance summary, applicability memo, or evidence packet your team can immediately reuse."
               href="/templates"
               cta="Browse templates"
             />
             <ActionCard
-              icon="🔍"
-              title="Inspect methodology"
-              body="See how Compass evaluates exposure, where human review still matters, and how evidence exports are assembled for enterprise use."
-              href="/methodology"
-              cta="Review methodology"
+              icon="🔖"
+              title="Save the laws that matter"
+              body="Track only the jurisdictions and laws relevant to your product so updates and reassessments stay focused."
+              href="/explore"
+              cta="Open explorer"
             />
           </div>
         </section>
